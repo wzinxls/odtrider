@@ -1,0 +1,2474 @@
+<!DOCTYPE html>
+<html lang="ru" style="--doc-font-scale: 1;"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>LibreODT Reader</title>
+
+    <!-- Tailwind CSS -->
+    
+
+    <!-- JSZip для локальной распаковки .odt и сборки .zip проекта Android APK -->
+    
+
+    <!-- Шрифты для интерфейса и совместимости с LibreOffice (Liberation Serif / Sans / Mono) -->
+    
+    
+    
+
+    
+
+    
+<link rel="stylesheet" href="./libs/styles.css"><script src="./libs/jszip.min.js"></script><script>window.__IS_ANDROID_APK__ = true;</script></head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- =====================================================================
+         ВЕРХНЯЯ ПАНЕЛЬ ИНСТРУМЕНТОВ (В СТИЛЕ LIBREOFFICE WRITER)
+         ===================================================================== -->
+    <header class="sticky top-0 z-40 lo-surface border-b shadow-sm px-2.5 sm:px-4 py-2">
+        <div class="max-w-5xl mx-auto flex items-center justify-between gap-2">
+            <!-- Логотип LibreODT -->
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-xl bg-loBlue text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <!-- Иконка документа LibreOffice Writer -->
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6M9 16h6M9 8h2"></path>
+                    </svg>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <h1 class="font-bold text-sm sm:text-base tracking-tight truncate">LibreODT</h1>
+                        <span class="hidden sm:inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-800">Writer Engine</span>
+                    </div>
+                    <p id="header-filename" class="text-[11px] opacity-70 truncate">Документ не открыт</p>
+                </div>
+            </div>
+
+            <!-- Правая группа кнопок -->
+            <div class="flex items-center gap-1.5 shrink-0">
+                <!-- Кнопка поиска (видна когда документ открыт) -->
+                <button id="btn-toggle-search" onclick="toggleSearchBar()" aria-label="Поиск по тексту" class="hidden min-w-[44px] min-h-[44px] rounded-xl border lo-surface-2 flex items-center justify-center active:scale-95 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </button>
+
+                <!-- Кнопка экспорта ZIP для сборки APK -->
+                <button id="btn-apk-builder" onclick="openApkModal()" aria-label="Скачать ZIP для сборки APK" class="min-h-[44px] px-2.5 sm:px-3.5 rounded-xl border border-emerald-600/30 bg-emerald-600 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-emerald-700 active:scale-95 transition shadow-sm">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                    </svg>
+                    <span>APK .ZIP</span>
+                </button>
+
+                <!-- Кнопка открытия файла .ODT -->
+                <button onclick="triggerFileInput()" aria-label="Открыть файл ODT" class="min-h-[44px] px-2.5 sm:px-3.5 rounded-xl bg-loBlue text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-loBlueDark active:scale-95 transition shadow-sm">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"></path>
+                    </svg>
+                    <span class="hidden sm:inline">Открыть</span>
+                    <span class="sm:hidden">.ODT</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Выдвижная панель поиска -->
+        <div id="search-bar" class="hidden max-w-5xl mx-auto mt-2 pt-2 border-t border-slate-300/60">
+            <div class="flex items-center gap-1.5">
+                <div class="relative flex-1">
+                    <input type="text" id="search-input" placeholder="Найти в документе..." class="w-full min-h-[44px] pl-3 pr-14 rounded-xl border lo-surface-2 text-sm focus:outline-none focus:ring-2 focus:ring-loBlue">
+                    <span id="search-counter" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium opacity-65">0/0</span>
+                </div>
+                <button onclick="navigateSearch(-1)" aria-label="Назад" class="min-w-[44px] min-h-[44px] rounded-xl border lo-surface-2 flex items-center justify-center active:scale-95">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                </button>
+                <button onclick="navigateSearch(1)" aria-label="Вперед" class="min-w-[44px] min-h-[44px] rounded-xl border lo-surface-2 flex items-center justify-center active:scale-95">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <button onclick="clearSearch()" aria-label="Закрыть поиск" class="min-w-[44px] min-h-[44px] rounded-xl border lo-surface-2 flex items-center justify-center text-red-500 active:scale-95">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Скрытый выбор файла -->
+    <input type="file" id="file-input" accept=".odt,application/vnd.oasis.opendocument.text" class="hidden">
+
+    <!-- =====================================================================
+         ОСНОВНАЯ РАБОЧАЯ ОБЛАСТЬ
+         ===================================================================== -->
+    <main class="flex-1 w-full max-w-5xl mx-auto px-2.5 sm:px-5 py-4 pb-28">
+
+        <!-- Баннер ошибок / уведомлений -->
+        <div id="status-banner" class="hidden mb-4 p-3.5 rounded-2xl border border-red-400/50 bg-red-50 text-red-800 text-xs sm:text-sm flex items-start justify-between gap-3 shadow-sm">
+            <div class="flex items-start gap-2">
+                <span class="font-bold">Ошибка:</span>
+                <span id="status-message">Не удалось открыть файл.</span>
+            </div>
+            <button onclick="hideStatus()" class="font-bold px-2 py-0.5 rounded-lg hover:bg-red-200/50">✕</button>
+        </div>
+
+        <!-- Экран приветствия / Загрузка ODT -->
+        <section id="welcome-screen" class="my-2 sm:my-6 max-w-3xl mx-auto">
+            <div id="drop-zone" onclick="triggerFileInput()" class="lo-surface border-2 border-dashed rounded-3xl p-6 sm:p-10 text-center cursor-pointer transition-all hover:border-loBlue hover:shadow-md active:scale-[0.99]">
+
+                <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-50 text-loBlue border border-blue-200 flex items-center justify-center shadow-sm">
+                    <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+
+                <span class="inline-block text-[11px] font-semibold uppercase tracking-wider px-3 py-1 rounded-full bg-blue-100 text-blue-800 mb-3">
+                    Полная поддержка стилей LibreOffice Writer
+                </span>
+
+                <h2 class="text-xl sm:text-2xl font-bold mb-2">Откройте документ .ODT</h2>
+                <p class="text-sm opacity-75 max-w-lg mx-auto mb-6 leading-relaxed">
+                    Точное отображение оформления из <code class="font-mono text-xs px-1 py-0.5 rounded lo-surface-2">styles.xml</code> и <code class="font-mono text-xs px-1 py-0.5 rounded lo-surface-2">content.xml</code>: шрифты, цвета, абзацы, отступы, границы таблиц, колонтитулы, сноски и встроенные изображения.
+                </p>
+
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button type="button" onclick="event.stopPropagation(); triggerFileInput();" class="w-full sm:w-auto min-h-[48px] px-6 rounded-2xl bg-loBlue text-white font-semibold text-sm shadow hover:bg-loBlueDark active:scale-95 transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        <span>Выбрать .ODT с телефона</span>
+                    </button>
+
+                    <button type="button" onclick="event.stopPropagation(); loadSampleODT();" class="w-full sm:w-auto min-h-[48px] px-5 rounded-2xl border lo-surface-2 font-semibold text-sm hover:border-loBlue active:scale-95 transition flex items-center justify-center gap-2">
+                        <span>📄</span>
+                        <span>Демо LibreOffice</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Карточка сборки Android APK -->
+            <div class="mt-4 lo-surface border rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+                <div class="flex items-start gap-3.5">
+                    <div class="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm sm:text-base">Собрать Android-приложение (.APK)</h3>
+                        <p class="text-xs opacity-75 mt-0.5 leading-relaxed">
+                            Скачайте готовый <strong>.zip</strong>-архив с локальными библиотеками (JSZip + CSS оффлайн), Kotlin WebView, открытием <code class="font-mono">.odt</code> из проводника/Telegram и GitHub Actions для сборки APK.
+                        </p>
+                    </div>
+                </div>
+                <button id="welcome-apk-btn" onclick="openApkModal()" class="w-full sm:w-auto shrink-0 min-h-[46px] px-5 rounded-2xl bg-emerald-600 text-white font-semibold text-xs sm:text-sm hover:bg-emerald-700 active:scale-95 transition flex items-center justify-center gap-2 shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                    </svg>
+                    <span>Скачать .ZIP проект</span>
+                </button>
+            </div>
+
+            <!-- Поддерживаемые элементы LibreOffice -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4 text-xs">
+                <div class="lo-surface border rounded-2xl p-3">
+                    <div class="font-bold text-loBlue mb-1">styles.xml</div>
+                    <div class="opacity-75">Наследование стилей, шрифты, цвета, фон</div>
+                </div>
+                <div class="lo-surface border rounded-2xl p-3">
+                    <div class="font-bold text-loBlue mb-1">Лист A4</div>
+                    <div class="opacity-75">Реальные поля, колонтитулы и масштаб</div>
+                </div>
+                <div class="lo-surface border rounded-2xl p-3">
+                    <div class="font-bold text-loBlue mb-1">Таблицы</div>
+                    <div class="opacity-75">Границы, заливка ячеек, объединения</div>
+                </div>
+                <div class="lo-surface border rounded-2xl p-3">
+                    <div class="font-bold text-loBlue mb-1">100% Оффлайн</div>
+                    <div class="opacity-75">Вся обработка локально на телефоне</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Индикатор загрузки -->
+        <div id="loading-spinner" class="hidden py-20 text-center">
+            <div class="w-10 h-10 mx-auto mb-3 border-3 border-loBlue border-t-transparent rounded-full animate-spin" style="border-width: 3px;"></div>
+            <p class="text-sm font-medium opacity-80">Разбор стилей и макета LibreOffice...</p>
+        </div>
+
+        <!-- =====================================================================
+             КОНТЕЙНЕР ПРОСМОТРА ДОКУМЕНТА
+             ===================================================================== -->
+        <section id="reader-container" class="hidden">
+            <!-- Инфо-полоска документа и переключатель режима листа -->
+            <div class="lo-surface border rounded-2xl px-3.5 py-2.5 mb-3.5 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span id="doc-meta-title" class="font-semibold text-xs sm:text-sm truncate">Документ</span>
+                    <span id="doc-stats-pill" class="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded-lg lo-surface-2 opacity-80 shrink-0">0 слов</span>
+                </div>
+
+                <!-- Переключатель: Лист A4 (1:1 LibreOffice) vs Адаптивный -->
+                <div class="flex items-center rounded-xl border lo-surface-2 p-0.5 text-xs shrink-0">
+                    <button id="mode-btn-page" onclick="setViewMode('page')" class="min-h-[36px] px-2.5 rounded-lg font-medium transition flex items-center gap-1">
+                        <span>📄</span>
+                        <span>Лист A4</span>
+                    </button>
+                    <button id="mode-btn-reflow" onclick="setViewMode('reflow')" class="min-h-[36px] px-2.5 rounded-lg font-medium transition flex items-center gap-1 bg-loBlue text-white shadow-sm">
+                        <span>📱</span>
+                        <span>Адаптив</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Область листа LibreOffice -->
+            <div id="page-viewport">
+                <div id="page-scale-wrapper" class="mx-auto" style="width: 100%; height: auto;">
+                    <article id="libre-page" class="mode-reflow" style="transform: none;">
+                        <!-- Верхний колонтитул из styles.xml -->
+                        <div id="doc-header-area" class="hidden"></div>
+
+                        <!-- Основное содержимое документа -->
+                        <div id="document-content"></div>
+
+                        <!-- Сноски документа -->
+                        <div id="doc-footnotes-area" class="hidden"></div>
+
+                        <!-- Нижний колонтитул из styles.xml -->
+                        <div id="doc-footer-area" class="hidden"></div>
+                    </article>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- =====================================================================
+         НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ И МАСШТАБА
+         ===================================================================== -->
+    <nav id="bottom-controls" class="hidden fixed bottom-0 inset-x-0 z-40 lo-surface border-t shadow-lg px-2.5 py-2">
+        <div class="max-w-5xl mx-auto flex items-center justify-between gap-1.5">
+            <!-- Оглавление -->
+            <button onclick="toggleDrawer('toc-drawer')" class="min-h-[44px] px-3 rounded-xl border lo-surface-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition">
+                <svg class="w-4 h-4 text-loBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h14"></path>
+                </svg>
+                <span>Структура</span>
+            </button>
+
+            <!-- Масштаб (зум листа в режиме A4 или размер шрифта в адаптивном режиме) -->
+            <div class="flex items-center rounded-xl border lo-surface-2 overflow-hidden">
+                <button onclick="adjustZoom(-1)" aria-label="Уменьшить масштаб" class="min-w-[44px] min-h-[44px] font-bold text-sm hover:bg-blue-500/10 active:scale-95 transition">−</button>
+                <button onclick="resetZoom()" id="zoom-label" title="Сбросить масштаб" class="min-h-[44px] px-2 text-xs font-semibold text-loBlue select-none">100%</button>
+                <button onclick="adjustZoom(1)" aria-label="Увеличить масштаб" class="min-w-[44px] min-h-[44px] font-bold text-sm hover:bg-blue-500/10 active:scale-95 transition">+</button>
+            </div>
+
+            <!-- Свойства и вид -->
+            <button onclick="toggleDrawer('settings-drawer')" class="min-h-[44px] px-3 rounded-xl border lo-surface-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition">
+                <svg class="w-4 h-4 text-loBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                </svg>
+                <span>Вид</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- =====================================================================
+         ШТОРКА: ОГЛАВЛЕНИЕ (СТРУКТУРА ДОКУМЕНТА)
+         ===================================================================== -->
+    <div id="toc-drawer" class="hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/50 backdrop-blur-xs" onclick="closeAllDrawers()">
+        <div class="lo-surface border-t rounded-t-3xl max-w-3xl w-full mx-auto p-5 max-h-[75vh] flex flex-col shadow-2xl" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-300/50">
+                <span class="font-bold text-sm">Навигатор (Заголовки)</span>
+                <button onclick="closeAllDrawers()" class="min-w-[44px] min-h-[44px] rounded-xl lo-surface-2 border flex items-center justify-center text-sm font-bold">✕</button>
+            </div>
+            <div id="toc-list" class="overflow-y-auto space-y-1.5 pr-1 text-xs sm:text-sm"></div>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         ШТОРКА: НАСТРОЙКИ ВИДА И СВОЙСТВА ДОКУМЕНТА
+         ===================================================================== -->
+    <div id="settings-drawer" class="hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/50 backdrop-blur-xs" onclick="closeAllDrawers()">
+        <div class="lo-surface border-t rounded-t-3xl max-w-3xl w-full mx-auto p-5 space-y-4 shadow-2xl" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-300/50">
+                <span class="font-bold text-sm">Параметры отображения</span>
+                <button onclick="closeAllDrawers()" class="min-w-[44px] min-h-[44px] rounded-xl lo-surface-2 border flex items-center justify-center text-sm font-bold">✕</button>
+            </div>
+
+            <!-- Информация о документе -->
+            <div class="lo-surface-2 border rounded-2xl p-3 text-xs space-y-1">
+                <div class="flex justify-between"><span class="opacity-70">Файл:</span><span id="info-filename" class="font-semibold truncate ml-2">—</span></div>
+                <div class="flex justify-between"><span class="opacity-70">Размер / Слова:</span><span id="info-stats" class="font-semibold">—</span></div>
+                <div class="flex justify-between"><span class="opacity-70">Формат страницы:</span><span id="info-pagesize" class="font-semibold">A4 (21 × 29.7 см)</span></div>
+                <div id="info-author-row" class="hidden flex justify-between"><span class="opacity-70">Автор:</span><span id="info-author" class="font-semibold truncate ml-2">—</span></div>
+            </div>
+
+            <!-- Тема интерфейса -->
+            <div>
+                <label class="block text-xs font-semibold opacity-75 mb-2">Оформление рабочей области:</label>
+                <div class="grid grid-cols-3 gap-2 text-xs">
+                    <button onclick="setAppearance('libre-light')" id="app-btn-libre-light" class="min-h-[46px] rounded-xl border p-2 font-medium transition bg-loBlue text-white border-loBlue">Libre Светлая</button>
+                    <button onclick="setAppearance('libre-dark')" id="app-btn-libre-dark" class="min-h-[46px] rounded-xl border p-2 font-medium transition lo-surface-2">Libre Тёмная</button>
+                    <button onclick="setAppearance('night-paper')" id="app-btn-night-paper" class="min-h-[46px] rounded-xl border p-2 font-medium transition lo-surface-2">Ночной лист</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         МОДАЛЬНОЕ ОКНО: ГЕНЕРАТОР .ZIP ПРОЕКТА ДЛЯ СБОРКИ ANDROID .APK
+         ===================================================================== -->
+    <div id="apk-modal" class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 backdrop-blur-xs hidden" onclick="closeApkModal()">
+        <div class="lo-surface border rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-300/50">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">APK</div>
+                    <div>
+                        <h3 class="font-bold text-base leading-tight">Сборка проекта для .APK</h3>
+                        <p class="text-[11px] opacity-70">Android Gradle + Kotlin WebView + Локальные библиотеки</p>
+                    </div>
+                </div>
+                <button onclick="closeApkModal()" class="min-w-[40px] min-h-[40px] rounded-xl lo-surface-2 border flex items-center justify-center font-bold text-sm">✕</button>
+            </div>
+
+            <div class="space-y-3 text-xs sm:text-sm">
+                <div>
+                    <label class="block text-xs font-semibold opacity-80 mb-1">Название приложения</label>
+                    <input type="text" id="apk-app-name" value="LibreODT Reader" class="w-full min-h-[44px] px-3 rounded-xl border lo-surface-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold opacity-80 mb-1">Package ID</label>
+                        <input type="text" id="apk-package-id" value="com.libreodt.reader" class="w-full min-h-[44px] px-3 rounded-xl border lo-surface-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold opacity-80 mb-1">Версия</label>
+                        <input type="text" id="apk-version" value="1.0.0" class="w-full min-h-[44px] px-3 rounded-xl border lo-surface-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </div>
+
+                <div class="lo-surface-2 border rounded-2xl p-3.5 text-xs space-y-1.5">
+                    <div class="font-bold text-emerald-700 mb-1">Что будет упаковано в .ZIP:</div>
+                    <div class="flex items-center gap-2"><span>✅</span><span><code class="font-mono">assets/www/libs/jszip.min.js</code> — библиотека JSZip локально</span></div>
+                    <div class="flex items-center gap-2"><span>✅</span><span><code class="font-mono">assets/www/libs/styles.css</code> — весь скомпилированный CSS оффлайн</span></div>
+                    <div class="flex items-center gap-2"><span>✅</span><span><code class="font-mono">assets/www/index.html</code> — оффлайн ридер без CDN</span></div>
+                    <div class="flex items-center gap-2"><span>✅</span><span><code class="font-mono">MainActivity.kt</code> + <code class="font-mono">AndroidManifest.xml</code> (открытие .odt из Telegram/Файлов)</span></div>
+                    <div class="flex items-center gap-2"><span>✅</span><span><code class="font-mono">build.gradle.kts</code> + <code class="font-mono">.github/workflows/build-apk.yml</code> (автосборка APK)</span></div>
+                </div>
+
+                <!-- Статус сборки -->
+                <div id="apk-build-log" class="p-3 rounded-xl bg-slate-900 text-emerald-400 font-mono text-[11px] leading-relaxed"><div>&gt; Инициализация структуры Android Gradle проекта...</div><div>&gt; Загрузка локальной библиотеки libs/jszip.min.js...</div><div>&gt; JSZip 3.10.1 упакован (95 КБ).</div><div>&gt; Извлечение скомпилированного CSS (Tailwind + LibreOffice Engine)...</div><div>&gt; Стили собраны (26 КБ).</div><div>&gt; Сборка автономного assets/www/index.html...</div></div>
+
+                <button id="btn-start-apk-zip" onclick="generateAndroidApkZip()" class="w-full min-h-[48px] rounded-2xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 active:scale-[0.99] transition flex items-center justify-center gap-2 shadow-md opacity-60" disabled="">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                    </svg>
+                    <span>Сформировать и скачать .ZIP</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* =====================================================================
+           ГЛОБАЛЬНОЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+           ===================================================================== */
+        const state = {
+            viewMode: window.innerWidth >= 768 ? 'page' : 'reflow', // 'page' (Лист A4) | 'reflow' (Адаптив)
+            appearance: 'libre-light', // 'libre-light' | 'libre-dark' | 'night-paper'
+            pageZoom: 1,       // Масштаб в режиме A4 (относительно авто-вписывания или 100%)
+            fontScale: 1,      // Масштаб шрифта в адаптивном режиме
+            pageLayout: {
+                width: '21cm',
+                height: '29.7cm',
+                marginTop: '2cm',
+                marginRight: '2cm',
+                marginBottom: '2cm',
+                marginLeft: '2cm',
+                backgroundColor: ''
+            },
+            blobUrls: [],
+            searchMatches: [],
+            currentMatchIdx: -1,
+            rawDocumentHTML: '',
+            currentFileName: ''
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setupDragAndDrop();
+            setupFileInput();
+            setupSearchInput();
+            updateViewModeUI();
+            updateAppearanceUI();
+
+            // Если запущено внутри скомпилированного Android APK — скрываем кнопку генератора APK
+            if (window.__IS_ANDROID_APK__ || navigator.userAgent.includes('LibreODTAndroidAPK')) {
+                const btn1 = document.getElementById('btn-apk-builder');
+                const btn2 = document.getElementById('welcome-apk-btn');
+                if (btn1) btn1.classList.add('hidden');
+                if (btn2) btn2.closest('.lo-surface')?.classList.add('hidden');
+            }
+
+            window.addEventListener('resize', () => {
+                if (state.viewMode === 'page') {
+                    applyPageTransform();
+                }
+            });
+        });
+
+        /**
+         * Мост для Android APK (MainActivity.kt вызывает эту функцию при открытии .odt из проводника/Telegram)
+         */
+        window.openOdtFromAndroidBase64 = async function(base64Data, fileName) {
+            try {
+                const binaryStr = atob(base64Data);
+                const len = binaryStr.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryStr.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: 'application/vnd.oasis.opendocument.text' });
+                await processODTFile(blob, fileName || 'document.odt');
+            } catch (err) {
+                showStatus('Не удалось открыть файл из Android: ' + err.message);
+            }
+        };
+
+        /* =====================================================================
+           ВЫБОР ФАЙЛА И DRAG & DROP
+           ===================================================================== */
+        function triggerFileInput() {
+            document.getElementById('file-input').click();
+        }
+
+        function setupFileInput() {
+            const input = document.getElementById('file-input');
+            input.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    processODTFile(e.target.files[0]);
+                    input.value = '';
+                }
+            });
+        }
+
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('drop-zone');
+            if (!dropZone) return;
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
+                dropZone.addEventListener(ev, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+            });
+            ['dragenter', 'dragover'].forEach(ev => {
+                dropZone.addEventListener(ev, () => dropZone.classList.add('border-loBlue', 'bg-blue-50/40'));
+            });
+            ['dragleave', 'drop'].forEach(ev => {
+                dropZone.addEventListener(ev, () => dropZone.classList.remove('border-loBlue', 'bg-blue-50/40'));
+            });
+            dropZone.addEventListener('drop', (e) => {
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    processODTFile(e.dataTransfer.files[0]);
+                }
+            });
+        }
+
+        /* =====================================================================
+           ГЛУБОКИЙ ПАРСЕР ODT (В ТОЧНОСТИ КАК LIBREOFFICE WRITER)
+           Парсит styles.xml + content.xml + meta.xml + Pictures/
+           ===================================================================== */
+        async function processODTFile(fileOrBlob, customName = null) {
+            hideStatus();
+            clearSearch(false);
+
+            const fileName = customName || fileOrBlob.name || 'document.odt';
+            const fileSizeKB = Math.max(1, Math.round(fileOrBlob.size / 1024));
+
+            if (!fileName.toLowerCase().endsWith('.odt')) {
+                showStatus('Выберите документ формата .odt (OpenDocument Text).');
+                return;
+            }
+
+            state.currentFileName = fileName;
+            document.getElementById('welcome-screen').classList.add('hidden');
+            document.getElementById('reader-container').classList.add('hidden');
+            document.getElementById('loading-spinner').classList.remove('hidden');
+
+            // Освобождаем память от прошлых изображений
+            state.blobUrls.forEach(url => URL.revokeObjectURL(url));
+            state.blobUrls = [];
+
+            try {
+                const arrayBuffer = await fileOrBlob.arrayBuffer();
+                const zip = await JSZip.loadAsync(arrayBuffer);
+
+                const contentFile = zip.file('content.xml');
+                if (!contentFile) {
+                    throw new Error('В архиве отсутствует content.xml. Возможно, это не ODT-файл или он поврежден.');
+                }
+
+                const parser = new DOMParser();
+                const contentXmlStr = await contentFile.async('string');
+                const contentDoc = parser.parseFromString(contentXmlStr, 'application/xml');
+                if (contentDoc.querySelector('parsererror')) {
+                    throw new Error('Ошибка чтения XML в content.xml.');
+                }
+
+                // Парсим styles.xml (именованные стили, шрифты, размеры страницы A4, колонтитулы)
+                let stylesDoc = null;
+                const stylesFile = zip.file('styles.xml');
+                if (stylesFile) {
+                    const stylesXmlStr = await stylesFile.async('string');
+                    const parsedStyles = parser.parseFromString(stylesXmlStr, 'application/xml');
+                    if (!parsedStyles.querySelector('parsererror')) {
+                        stylesDoc = parsedStyles;
+                    }
+                }
+
+                // Парсим meta.xml
+                let metaInfo = { title: fileName, creator: '' };
+                const metaFile = zip.file('meta.xml');
+                if (metaFile) {
+                    const metaXmlStr = await metaFile.async('string');
+                    metaInfo = parseMetaXml(metaXmlStr, fileName);
+                }
+
+                // Извлекаем встроенные картинки
+                const imageMap = await extractEmbeddedImages(zip);
+
+                // Строим полную таблицу стилей (наследование + шрифты + списки + поля страницы)
+                const styleEngine = buildLibreOfficeStyleEngine(stylesDoc, contentDoc);
+
+                // Конвертируем основное тело документа и собираем сноски
+                const footnotes = [];
+                const officeText = getFirstByLocalName(contentDoc, 'text');
+                if (!officeText) {
+                    throw new Error('В документе не найден текстовый раздел office:text.');
+                }
+                const bodyHtml = convertNodeChildrenToHtml(officeText, styleEngine, imageMap, footnotes, { headingCounter: { val: 0 }, listLevel: 0 });
+
+                // Конвертируем колонтитулы (Header / Footer) из master-page в styles.xml
+                let headerHtml = '';
+                let footerHtml = '';
+                if (stylesDoc) {
+                    const masterPage = getFirstByLocalName(stylesDoc, 'master-page');
+                    if (masterPage) {
+                        const headerNode = getDirectChildByLocalName(masterPage, 'header');
+                        const footerNode = getDirectChildByLocalName(masterPage, 'footer');
+                        if (headerNode) {
+                            headerHtml = convertNodeChildrenToHtml(headerNode, styleEngine, imageMap, [], { headingCounter: { val: 9000 }, listLevel: 0 });
+                        }
+                        if (footerNode) {
+                            footerHtml = convertNodeChildrenToHtml(footerNode, styleEngine, imageMap, [], { headingCounter: { val: 9500 }, listLevel: 0 });
+                        }
+                    }
+                }
+
+                // Сохраняем параметры листа страницы
+                state.pageLayout = styleEngine.pageLayout;
+
+                renderDocumentToUI({
+                    fileName,
+                    fileSizeKB,
+                    metaInfo,
+                    bodyHtml,
+                    headerHtml,
+                    footerHtml,
+                    footnotes
+                });
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('loading-spinner').classList.add('hidden');
+                document.getElementById('welcome-screen').classList.remove('hidden');
+                showStatus(err.message || 'Не удалось обработать ODT-файл.');
+            }
+        }
+
+        /**
+         * Вспомогательные namespace-независимые функции для работы с XML DOM
+         */
+        function getFirstByLocalName(root, localName) {
+            const all = root.getElementsByTagName('*');
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].localName === localName) return all[i];
+            }
+            return null;
+        }
+
+        function getAllByLocalName(root, localName) {
+            const result = [];
+            const all = root.getElementsByTagName('*');
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].localName === localName) result.push(all[i]);
+            }
+            return result;
+        }
+
+        function getDirectChildByLocalName(parent, localName) {
+            for (let i = 0; i < parent.childNodes.length; i++) {
+                const n = parent.childNodes[i];
+                if (n.nodeType === Node.ELEMENT_NODE && n.localName === localName) return n;
+            }
+            return null;
+        }
+
+        function getAttr(el, localAttrName) {
+            if (!el || !el.attributes) return null;
+            for (let i = 0; i < el.attributes.length; i++) {
+                const attr = el.attributes[i];
+                if (attr.localName === localAttrName || attr.name === localAttrName) {
+                    return attr.value;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Маппинг шрифтов LibreOffice на загруженные/системные аналоги с идентичной метрикой
+         */
+        function mapLibreOfficeFont(rawFontName, fontDecls) {
+            if (!rawFontName) return null;
+            const resolved = fontDecls[rawFontName] || rawFontName;
+            const clean = resolved.replace(/['"]/g, '').trim();
+            const lower = clean.toLowerCase();
+
+            if (lower.includes('liberation serif') || lower.includes('times new roman')) {
+                return `'${clean}', 'Tinos', 'Times New Roman', Georgia, serif`;
+            }
+            if (lower.includes('liberation sans') || lower.includes('arial') || lower.includes('helvetica') || lower.includes('dejavu sans')) {
+                return `'${clean}', 'Arimo', Arial, Helvetica, sans-serif`;
+            }
+            if (lower.includes('liberation mono') || lower.includes('courier') || lower.includes('consolas') || lower.includes('mono')) {
+                return `'${clean}', 'Cousine', 'Courier New', monospace`;
+            }
+            if (lower.includes('calibri') || lower.includes('carlito')) {
+                return `'${clean}', 'Arimo', Inter, sans-serif`;
+            }
+            if (lower.includes('georgia') || lower.includes('cambria') || lower.includes('serif')) {
+                return `'${clean}', 'Tinos', Georgia, serif`;
+            }
+            return `'${clean}', 'Arimo', sans-serif`;
+        }
+
+        /**
+         * Построение движка стилей LibreOffice (шрифты, стили по умолчанию, наследование, списки, страница)
+         */
+        function buildLibreOfficeStyleEngine(stylesDoc, contentDoc) {
+            const fontDecls = {};
+            const defaultStyles = {};
+            const namedStyles = {}; // key: `${family}::${name}` и fallback по имени
+            const listStyles = {};  // key: styleName -> { level: { type: 'ul'|'ol', bullet, numFormat, spaceBefore } }
+            const pageLayout = {
+                width: '21cm',
+                height: '29.7cm',
+                marginTop: '2cm',
+                marginRight: '2cm',
+                marginBottom: '2cm',
+                marginLeft: '2cm',
+                backgroundColor: ''
+            };
+
+            function parseStyleProperties(styleNode) {
+                const props = {
+                    text: {},
+                    para: {},
+                    table: {},
+                    col: {},
+                    row: {},
+                    cell: {},
+                    graphic: {}
+                };
+
+                const textProps = getDirectChildByLocalName(styleNode, 'text-properties');
+                if (textProps) {
+                    const fw = getAttr(textProps, 'font-weight');
+                    const fs = getAttr(textProps, 'font-style');
+                    const fz = getAttr(textProps, 'font-size');
+                    const col = getAttr(textProps, 'color');
+                    const bg = getAttr(textProps, 'background-color');
+                    const fn = getAttr(textProps, 'font-name') || getAttr(textProps, 'font-family');
+                    const ul = getAttr(textProps, 'text-underline-style');
+                    const lt = getAttr(textProps, 'text-line-through-style');
+                    const pos = getAttr(textProps, 'text-position');
+                    const tt = getAttr(textProps, 'text-transform');
+                    const fv = getAttr(textProps, 'font-variant');
+                    const ls = getAttr(textProps, 'letter-spacing');
+
+                    if (fw) props.text.fontWeight = fw;
+                    if (fs) props.text.fontStyle = fs;
+                    if (fz && !fz.endsWith('%')) props.text.fontSize = fz;
+                    if (col && col !== 'transparent') props.text.color = col;
+                    if (bg && bg !== 'transparent') props.text.backgroundColor = bg;
+                    if (fn) props.text.fontName = fn;
+                    if (ul && ul !== 'none') props.text.underline = true;
+                    if (ul === 'none') props.text.underline = false;
+                    if (lt && lt !== 'none') props.text.lineThrough = true;
+                    if (lt === 'none') props.text.lineThrough = false;
+                    if (pos) props.text.textPosition = pos;
+                    if (tt) props.text.textTransform = tt;
+                    if (fv) props.text.fontVariant = fv;
+                    if (ls && ls !== 'normal') props.text.letterSpacing = ls;
+                }
+
+                const paraProps = getDirectChildByLocalName(styleNode, 'paragraph-properties');
+                if (paraProps) {
+                    const align = getAttr(paraProps, 'text-align');
+                    const mt = getAttr(paraProps, 'margin-top');
+                    const mb = getAttr(paraProps, 'margin-bottom');
+                    const ml = getAttr(paraProps, 'margin-left');
+                    const mr = getAttr(paraProps, 'margin-right');
+                    const ti = getAttr(paraProps, 'text-indent');
+                    const lh = getAttr(paraProps, 'line-height');
+                    const bg = getAttr(paraProps, 'background-color');
+                    const pad = getAttr(paraProps, 'padding');
+                    const pt = getAttr(paraProps, 'padding-top');
+                    const pr = getAttr(paraProps, 'padding-right');
+                    const pb = getAttr(paraProps, 'padding-bottom');
+                    const pl = getAttr(paraProps, 'padding-left');
+                    const b = getAttr(paraProps, 'border');
+                    const bt = getAttr(paraProps, 'border-top');
+                    const br = getAttr(paraProps, 'border-right');
+                    const bb = getAttr(paraProps, 'border-bottom');
+                    const bl = getAttr(paraProps, 'border-left');
+                    const breakBefore = getAttr(paraProps, 'break-before');
+
+                    if (align) {
+                        const alignMap = { start: 'left', end: 'right', center: 'center', justify: 'justify', left: 'left', right: 'right' };
+                        props.para.textAlign = alignMap[align] || align;
+                    }
+                    if (mt) props.para.marginTop = mt;
+                    if (mb) props.para.marginBottom = mb;
+                    if (ml) props.para.marginLeft = ml;
+                    if (mr) props.para.marginRight = mr;
+                    if (ti) props.para.textIndent = ti;
+                    if (lh && lh !== 'normal') props.para.lineHeight = lh;
+                    if (bg && bg !== 'transparent') props.para.backgroundColor = bg;
+                    if (pad) props.para.padding = pad;
+                    if (pt) props.para.paddingTop = pt;
+                    if (pr) props.para.paddingRight = pr;
+                    if (pb) props.para.paddingBottom = pb;
+                    if (pl) props.para.paddingLeft = pl;
+                    if (b) props.para.border = normalizeBorder(b);
+                    if (bt) props.para.borderTop = normalizeBorder(bt);
+                    if (br) props.para.borderRight = normalizeBorder(br);
+                    if (bb) props.para.borderBottom = normalizeBorder(bb);
+                    if (bl) props.para.borderLeft = normalizeBorder(bl);
+                    if (breakBefore === 'page') props.para.breakBeforePage = true;
+                }
+
+                const tableProps = getDirectChildByLocalName(styleNode, 'table-properties');
+                if (tableProps) {
+                    const w = getAttr(tableProps, 'width');
+                    const rw = getAttr(tableProps, 'rel-width');
+                    const bg = getAttr(tableProps, 'background-color');
+                    const mt = getAttr(tableProps, 'margin-top');
+                    const mb = getAttr(tableProps, 'margin-bottom');
+                    if (rw) props.table.width = rw;
+                    else if (w) props.table.width = w;
+                    if (bg && bg !== 'transparent') props.table.backgroundColor = bg;
+                    if (mt) props.table.marginTop = mt;
+                    if (mb) props.table.marginBottom = mb;
+                }
+
+                const colProps = getDirectChildByLocalName(styleNode, 'table-column-properties');
+                if (colProps) {
+                    const cw = getAttr(colProps, 'column-width');
+                    const rcw = getAttr(colProps, 'rel-column-width');
+                    if (cw) props.col.width = cw;
+                    if (rcw) props.col.relWidth = rcw;
+                }
+
+                const rowProps = getDirectChildByLocalName(styleNode, 'table-row-properties');
+                if (rowProps) {
+                    const rh = getAttr(rowProps, 'row-height') || getAttr(rowProps, 'min-row-height');
+                    const bg = getAttr(rowProps, 'background-color');
+                    if (rh) props.row.height = rh;
+                    if (bg && bg !== 'transparent') props.row.backgroundColor = bg;
+                }
+
+                const cellProps = getDirectChildByLocalName(styleNode, 'table-cell-properties');
+                if (cellProps) {
+                    const bg = getAttr(cellProps, 'background-color');
+                    const b = getAttr(cellProps, 'border');
+                    const bt = getAttr(cellProps, 'border-top');
+                    const br = getAttr(cellProps, 'border-right');
+                    const bb = getAttr(cellProps, 'border-bottom');
+                    const bl = getAttr(cellProps, 'border-left');
+                    const pad = getAttr(cellProps, 'padding');
+                    const pt = getAttr(cellProps, 'padding-top');
+                    const pr = getAttr(cellProps, 'padding-right');
+                    const pb = getAttr(cellProps, 'padding-bottom');
+                    const pl = getAttr(cellProps, 'padding-left');
+                    const va = getAttr(cellProps, 'vertical-align');
+
+                    if (bg && bg !== 'transparent') props.cell.backgroundColor = bg;
+                    if (b) props.cell.border = normalizeBorder(b);
+                    if (bt) props.cell.borderTop = normalizeBorder(bt);
+                    if (br) props.cell.borderRight = normalizeBorder(br);
+                    if (bb) props.cell.borderBottom = normalizeBorder(bb);
+                    if (bl) props.cell.borderLeft = normalizeBorder(bl);
+                    if (pad) props.cell.padding = pad;
+                    if (pt) props.cell.paddingTop = pt;
+                    if (pr) props.cell.paddingRight = pr;
+                    if (pb) props.cell.paddingBottom = pb;
+                    if (pl) props.cell.paddingLeft = pl;
+                    if (va) props.cell.verticalAlign = va === 'automatic' ? 'top' : va;
+                }
+
+                const graphicProps = getDirectChildByLocalName(styleNode, 'graphic-properties');
+                if (graphicProps) {
+                    const hp = getAttr(graphicProps, 'horizontal-pos');
+                    const b = getAttr(graphicProps, 'border');
+                    if (hp) props.graphic.horizontalPos = hp;
+                    if (b) props.graphic.border = normalizeBorder(b);
+                }
+
+                return props;
+            }
+
+            function ingestXmlDoc(doc) {
+                if (!doc) return;
+
+                // 1. Объявления шрифтов
+                const fontFaces = getAllByLocalName(doc, 'font-face');
+                fontFaces.forEach(ff => {
+                    const name = getAttr(ff, 'name');
+                    const family = getAttr(ff, 'font-family');
+                    if (name && family) fontDecls[name] = family;
+                });
+
+                // 2. Стили по умолчанию (default-style)
+                const defaults = getAllByLocalName(doc, 'default-style');
+                defaults.forEach(ds => {
+                    const fam = getAttr(ds, 'family');
+                    if (fam) {
+                        defaultStyles[fam] = parseStyleProperties(ds);
+                    }
+                });
+
+                // 3. Обычные и автоматические стили (style:style)
+                const styles = getAllByLocalName(doc, 'style');
+                styles.forEach(st => {
+                    const name = getAttr(st, 'name');
+                    const fam = getAttr(st, 'family') || 'paragraph';
+                    const parent = getAttr(st, 'parent-style-name');
+                    if (!name) return;
+
+                    const def = {
+                        name,
+                        family: fam,
+                        parent,
+                        props: parseStyleProperties(st)
+                    };
+                    namedStyles[`${fam}::${name}`] = def;
+                    namedStyles[name] = def;
+                });
+
+                // 4. Стили списков (text:list-style)
+                const lStyles = getAllByLocalName(doc, 'list-style');
+                lStyles.forEach(ls => {
+                    const name = getAttr(ls, 'name');
+                    if (!name) return;
+                    const levels = {};
+                    for (let i = 0; i < ls.childNodes.length; i++) {
+                        const child = ls.childNodes[i];
+                        if (child.nodeType !== Node.ELEMENT_NODE) continue;
+                        const lvl = parseInt(getAttr(child, 'level') || '1', 10);
+                        if (child.localName === 'list-level-style-number') {
+                            levels[lvl] = {
+                                type: 'ol',
+                                numFormat: getAttr(child, 'num-format') || '1'
+                            };
+                        } else if (child.localName === 'list-level-style-bullet') {
+                            levels[lvl] = {
+                                type: 'ul',
+                                bulletChar: getAttr(child, 'bullet-char') || '•'
+                            };
+                        }
+                    }
+                    listStyles[name] = levels;
+                });
+
+                // 5. Макет страницы (style:page-layout)
+                const pageLayoutProps = getFirstByLocalName(doc, 'page-layout-properties');
+                if (pageLayoutProps) {
+                    const pw = getAttr(pageLayoutProps, 'page-width');
+                    const ph = getAttr(pageLayoutProps, 'page-height');
+                    const mt = getAttr(pageLayoutProps, 'margin-top');
+                    const mr = getAttr(pageLayoutProps, 'margin-right');
+                    const mb = getAttr(pageLayoutProps, 'margin-bottom');
+                    const ml = getAttr(pageLayoutProps, 'margin-left');
+                    const bg = getAttr(pageLayoutProps, 'background-color');
+                    if (pw) pageLayout.width = pw;
+                    if (ph) pageLayout.height = ph;
+                    if (mt) pageLayout.marginTop = mt;
+                    if (mr) pageLayout.marginRight = mr;
+                    if (mb) pageLayout.marginBottom = mb;
+                    if (ml) pageLayout.marginLeft = ml;
+                    if (bg && bg !== 'transparent') pageLayout.backgroundColor = bg;
+                }
+            }
+
+            // Сначала загружаем styles.xml, затем content.xml (чтобы automatic-styles могли переопределять)
+            ingestXmlDoc(stylesDoc);
+            ingestXmlDoc(contentDoc);
+
+            // Резолвер с полным наследованием цепочки parent-style-name
+            const cache = {};
+            function resolve(styleName, family = 'paragraph') {
+                const cacheKey = `${family}::${styleName || ''}`;
+                if (cache[cacheKey]) return cache[cacheKey];
+
+                const chain = [];
+                const visited = new Set();
+                let currentName = styleName;
+
+                while (currentName && !visited.has(currentName)) {
+                    visited.add(currentName);
+                    const def = namedStyles[`${family}::${currentName}`] || namedStyles[currentName];
+                    if (!def) break;
+                    chain.unshift(def.props);
+                    currentName = def.parent;
+                }
+
+                // Базовые свойства по умолчанию из default-style
+                const merged = {
+                    text: { ...(defaultStyles[family]?.text || defaultStyles.paragraph?.text || {}) },
+                    para: { ...(defaultStyles[family]?.para || {}) },
+                    table: { ...(defaultStyles[family]?.table || {}) },
+                    col: { ...(defaultStyles[family]?.col || {}) },
+                    row: { ...(defaultStyles[family]?.row || {}) },
+                    cell: { ...(defaultStyles[family]?.cell || {}) },
+                    graphic: { ...(defaultStyles[family]?.graphic || {}) }
+                };
+
+                chain.forEach(p => {
+                    Object.assign(merged.text, p.text);
+                    Object.assign(merged.para, p.para);
+                    Object.assign(merged.table, p.table);
+                    Object.assign(merged.col, p.col);
+                    Object.assign(merged.row, p.row);
+                    Object.assign(merged.cell, p.cell);
+                    Object.assign(merged.graphic, p.graphic);
+                });
+
+                cache[cacheKey] = merged;
+                return merged;
+            }
+
+            return { fontDecls, listStyles, pageLayout, resolve };
+        }
+
+        function normalizeBorder(val) {
+            if (!val || val === 'none') return 'none';
+            // В ODT бывает "0.06pt solid #000000", в браузерах 0.06pt может исчезнуть на мобильных экранах -> минимум 0.75pt
+            return val.replace(/^0\.0\d+pt/, '0.75pt').replace(/^0\.0\d+cm/, '0.75pt');
+        }
+
+        /**
+         * Проверка, является ли цвет очень темным (нужно для корректной адаптации в Ночном режиме листа)
+         */
+        function isVeryDarkColor(colorStr) {
+            if (!colorStr) return false;
+            const hex = colorStr.trim().toLowerCase();
+            if (hex === 'black' || hex === '#000' || hex === '#000000') return true;
+            const m = hex.match(/^#([0-9a-f]{6})$/);
+            if (m) {
+                const r = parseInt(m[1].slice(0, 2), 16);
+                const g = parseInt(m[1].slice(2, 4), 16);
+                const b = parseInt(m[1].slice(4, 6), 16);
+                return (r * 0.299 + g * 0.587 + b * 0.114) < 55;
+            }
+            return false;
+        }
+
+        /**
+         * Применение вычисленных стилей LibreOffice к HTML-элементу
+         */
+        function applyTextCss(el, textProps, fontDecls) {
+            if (!textProps) return;
+            if (textProps.fontWeight) el.style.fontWeight = textProps.fontWeight;
+            if (textProps.fontStyle) el.style.fontStyle = textProps.fontStyle;
+            if (textProps.fontSize) {
+                el.style.fontSize = `calc(${textProps.fontSize} * var(--doc-font-scale))`;
+            }
+            if (textProps.color) {
+                el.style.color = textProps.color;
+                if (isVeryDarkColor(textProps.color)) {
+                    el.setAttribute('data-dark-text', 'true');
+                }
+            }
+            if (textProps.backgroundColor) el.style.backgroundColor = textProps.backgroundColor;
+            if (textProps.fontName) {
+                const ff = mapLibreOfficeFont(textProps.fontName, fontDecls);
+                if (ff) el.style.fontFamily = ff;
+            }
+            const decorations = [];
+            if (textProps.underline) decorations.push('underline');
+            if (textProps.lineThrough) decorations.push('line-through');
+            if (decorations.length > 0) el.style.textDecoration = decorations.join(' ');
+            if (textProps.textTransform) el.style.textTransform = textProps.textTransform;
+            if (textProps.fontVariant) el.style.fontVariant = textProps.fontVariant;
+            if (textProps.letterSpacing) el.style.letterSpacing = textProps.letterSpacing;
+
+            // Верхний / нижний индекс (super / sub)
+            if (textProps.textPosition) {
+                const tp = textProps.textPosition.toLowerCase();
+                if (tp.startsWith('super') || (tp.includes('%') && !tp.startsWith('-') && !tp.startsWith('0%'))) {
+                    el.style.verticalAlign = 'super';
+                    el.style.fontSize = '0.72em';
+                } else if (tp.startsWith('sub') || tp.startsWith('-')) {
+                    el.style.verticalAlign = 'sub';
+                    el.style.fontSize = '0.72em';
+                }
+            }
+        }
+
+        function applyParaCss(el, paraProps) {
+            if (!paraProps) return;
+            if (paraProps.textAlign) el.style.textAlign = paraProps.textAlign;
+            if (paraProps.marginTop) el.style.marginTop = paraProps.marginTop;
+            if (paraProps.marginBottom) el.style.marginBottom = paraProps.marginBottom;
+            if (paraProps.marginLeft) el.style.marginLeft = paraProps.marginLeft;
+            if (paraProps.marginRight) el.style.marginRight = paraProps.marginRight;
+            if (paraProps.textIndent) el.style.textIndent = paraProps.textIndent;
+            if (paraProps.lineHeight) el.style.lineHeight = paraProps.lineHeight;
+            if (paraProps.backgroundColor) el.style.backgroundColor = paraProps.backgroundColor;
+            if (paraProps.padding) el.style.padding = paraProps.padding;
+            if (paraProps.paddingTop) el.style.paddingTop = paraProps.paddingTop;
+            if (paraProps.paddingRight) el.style.paddingRight = paraProps.paddingRight;
+            if (paraProps.paddingBottom) el.style.paddingBottom = paraProps.paddingBottom;
+            if (paraProps.paddingLeft) el.style.paddingLeft = paraProps.paddingLeft;
+            if (paraProps.border) el.style.border = paraProps.border;
+            if (paraProps.borderTop) el.style.borderTop = paraProps.borderTop;
+            if (paraProps.borderRight) el.style.borderRight = paraProps.borderRight;
+            if (paraProps.borderBottom) el.style.borderBottom = paraProps.borderBottom;
+            if (paraProps.borderLeft) el.style.borderLeft = paraProps.borderLeft;
+        }
+
+        function applyCellCss(el, cellProps) {
+            if (!cellProps) return;
+            if (cellProps.backgroundColor) el.style.backgroundColor = cellProps.backgroundColor;
+            if (cellProps.border) el.style.border = cellProps.border;
+            if (cellProps.borderTop) el.style.borderTop = cellProps.borderTop;
+            if (cellProps.borderRight) el.style.borderRight = cellProps.borderRight;
+            if (cellProps.borderBottom) el.style.borderBottom = cellProps.borderBottom;
+            if (cellProps.borderLeft) el.style.borderLeft = cellProps.borderLeft;
+            if (cellProps.padding) el.style.padding = cellProps.padding;
+            if (cellProps.paddingTop) el.style.paddingTop = cellProps.paddingTop;
+            if (cellProps.paddingRight) el.style.paddingRight = cellProps.paddingRight;
+            if (cellProps.paddingBottom) el.style.paddingBottom = cellProps.paddingBottom;
+            if (cellProps.paddingLeft) el.style.paddingLeft = cellProps.paddingLeft;
+            if (cellProps.verticalAlign) el.style.verticalAlign = cellProps.verticalAlign;
+        }
+
+        /**
+         * Рекурсивный рендер XML-узлов OpenDocument в HTML с сохранением стилей LibreOffice
+         */
+        function convertNodeChildrenToHtml(xmlParent, styleEngine, imageMap, footnotes, ctx) {
+            const fragContainer = document.createElement('div');
+            traverse(xmlParent, fragContainer, ctx);
+            return fragContainer.innerHTML;
+
+            function traverse(xmlNode, htmlParent, curCtx) {
+                for (let i = 0; i < xmlNode.childNodes.length; i++) {
+                    const node = xmlNode.childNodes[i];
+
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        htmlParent.appendChild(document.createTextNode(node.nodeValue));
+                        continue;
+                    }
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+                    const lname = node.localName;
+
+                    // Пропускаем служебные секции (sequence-decls и т.д.)
+                    if (lname === 'sequence-decls' || lname === 'tracked-changes' || lname === 'forms') {
+                        continue;
+                    }
+
+                    // Заголовки (text:h)
+                    if (lname === 'h') {
+                        const styleName = getAttr(node, 'style-name');
+                        const resolved = styleEngine.resolve(styleName, 'paragraph');
+                        if (resolved.para.breakBeforePage) {
+                            const hr = document.createElement('hr');
+                            hr.className = 'lo-page-break';
+                            htmlParent.appendChild(hr);
+                        }
+                        const lvl = Math.min(Math.max(parseInt(getAttr(node, 'outline-level') || '1', 10), 1), 6);
+                        const hEl = document.createElement(`h${lvl}`);
+                        curCtx.headingCounter.val++;
+                        hEl.id = `odt-heading-${curCtx.headingCounter.val}`;
+                        applyParaCss(hEl, resolved.para);
+                        applyTextCss(hEl, resolved.text, styleEngine.fontDecls);
+                        traverse(node, hEl, curCtx);
+                        htmlParent.appendChild(hEl);
+                    }
+                    // Абзацы (text:p)
+                    else if (lname === 'p') {
+                        const styleName = getAttr(node, 'style-name');
+                        const resolved = styleEngine.resolve(styleName, 'paragraph');
+                        if (resolved.para.breakBeforePage) {
+                            const hr = document.createElement('hr');
+                            hr.className = 'lo-page-break';
+                            htmlParent.appendChild(hr);
+                        }
+                        const pEl = document.createElement('p');
+                        applyParaCss(pEl, resolved.para);
+                        applyTextCss(pEl, resolved.text, styleEngine.fontDecls);
+                        traverse(node, pEl, curCtx);
+                        htmlParent.appendChild(pEl);
+                    }
+                    // Инлайн-спаны (text:span)
+                    else if (lname === 'span') {
+                        const styleName = getAttr(node, 'style-name');
+                        const resolved = styleEngine.resolve(styleName, 'text');
+                        const spanEl = document.createElement('span');
+                        applyTextCss(spanEl, resolved.text, styleEngine.fontDecls);
+                        traverse(node, spanEl, curCtx);
+                        htmlParent.appendChild(spanEl);
+                    }
+                    // Пробелы, табы, переносы строк
+                    else if (lname === 's') {
+                        const c = parseInt(getAttr(node, 'c') || '1', 10);
+                        htmlParent.appendChild(document.createTextNode('\u00A0'.repeat(Math.min(c, 40))));
+                    }
+                    else if (lname === 'tab') {
+                        const tabSpan = document.createElement('span');
+                        tabSpan.style.display = 'inline-block';
+                        tabSpan.style.width = '1.25cm';
+                        tabSpan.innerHTML = '&nbsp;';
+                        htmlParent.appendChild(tabSpan);
+                    }
+                    else if (lname === 'line-break') {
+                        htmlParent.appendChild(document.createElement('br'));
+                    }
+                    // Ссылки (text:a)
+                    else if (lname === 'a') {
+                        const href = getAttr(node, 'href') || '#';
+                        const aEl = document.createElement('a');
+                        aEl.href = href;
+                        if (!href.startsWith('#')) {
+                            aEl.target = '_blank';
+                            aEl.rel = 'noopener noreferrer';
+                        }
+                        traverse(node, aEl, curCtx);
+                        htmlParent.appendChild(aEl);
+                    }
+                    // Закладки (text:bookmark / bookmark-start)
+                    else if (lname === 'bookmark' || lname === 'bookmark-start') {
+                        const bName = getAttr(node, 'name');
+                        if (bName) {
+                            const anchor = document.createElement('span');
+                            anchor.id = bName;
+                            htmlParent.appendChild(anchor);
+                        }
+                    }
+                    // Сноски (text:note)
+                    else if (lname === 'note') {
+                        const citationNode = getDirectChildByLocalName(node, 'note-citation');
+                        const bodyNode = getDirectChildByLocalName(node, 'note-body');
+                        const num = (citationNode && citationNode.textContent.trim()) || String(footnotes.length + 1);
+                        const fnId = `lo-fn-${footnotes.length + 1}`;
+                        const refLink = document.createElement('a');
+                        refLink.href = `#${fnId}`;
+                        refLink.className = 'lo-footnote-ref';
+                        refLink.textContent = num;
+                        htmlParent.appendChild(refLink);
+
+                        if (bodyNode) {
+                            const fnHtml = convertNodeChildrenToHtml(bodyNode, styleEngine, imageMap, [], curCtx);
+                            footnotes.push({ id: fnId, num, html: fnHtml });
+                        }
+                    }
+                    // Списки (text:list) с поддержкой нумерации и маркеров из styles.xml
+                    else if (lname === 'list') {
+                        const nextLevel = curCtx.listLevel + 1;
+                        const lStyleName = getAttr(node, 'style-name') || curCtx.listStyleName;
+                        const levelDef = (lStyleName && styleEngine.listStyles[lStyleName]) ? styleEngine.listStyles[lStyleName][nextLevel] : null;
+
+                        const isOrdered = levelDef && levelDef.type === 'ol';
+                        const listEl = document.createElement(isOrdered ? 'ol' : 'ul');
+
+                        if (isOrdered) {
+                            const fmtMap = { '1': 'decimal', 'a': 'lower-alpha', 'A': 'upper-alpha', 'i': 'lower-roman', 'I': 'upper-roman' };
+                            listEl.style.listStyleType = fmtMap[levelDef.numFormat] || 'decimal';
+                        } else {
+                            listEl.style.listStyleType = nextLevel === 1 ? 'disc' : (nextLevel === 2 ? 'circle' : 'square');
+                        }
+
+                        traverse(node, listEl, { ...curCtx, listLevel: nextLevel, listStyleName: lStyleName });
+                        htmlParent.appendChild(listEl);
+                    }
+                    else if (lname === 'list-item' || lname === 'list-header') {
+                        const liEl = document.createElement('li');
+                        traverse(node, liEl, curCtx);
+                        htmlParent.appendChild(liEl);
+                    }
+                    // Таблицы (table:table) с точными ширинами колонок, границами и заливками LibreOffice
+                    else if (lname === 'table') {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'lo-table-scroll';
+
+                        const tableEl = document.createElement('table');
+                        const tStyleName = getAttr(node, 'style-name');
+                        const tRes = styleEngine.resolve(tStyleName, 'table');
+                        if (tRes.table.width) tableEl.style.width = tRes.table.width;
+                        if (tRes.table.backgroundColor) tableEl.style.backgroundColor = tRes.table.backgroundColor;
+                        if (tRes.table.marginTop) tableEl.style.marginTop = tRes.table.marginTop;
+                        if (tRes.table.marginBottom) tableEl.style.marginBottom = tRes.table.marginBottom;
+
+                        // Собираем ширины колонок (<colgroup>)
+                        const colgroup = document.createElement('colgroup');
+                        let hasCols = false;
+                        for (let c = 0; c < node.childNodes.length; c++) {
+                            const ch = node.childNodes[c];
+                            if (ch.nodeType === Node.ELEMENT_NODE && ch.localName === 'table-column') {
+                                const colStyleName = getAttr(ch, 'style-name');
+                                const colRes = styleEngine.resolve(colStyleName, 'table-column');
+                                const repeat = Math.min(parseInt(getAttr(ch, 'number-columns-repeated') || '1', 10), 40);
+                                for (let r = 0; r < repeat; r++) {
+                                    const colEl = document.createElement('col');
+                                    if (colRes.col.width) colEl.style.width = colRes.col.width;
+                                    colgroup.appendChild(colEl);
+                                    hasCols = true;
+                                }
+                            }
+                        }
+                        if (hasCols) tableEl.appendChild(colgroup);
+
+                        traverse(node, tableEl, curCtx);
+                        wrapper.appendChild(tableEl);
+                        htmlParent.appendChild(wrapper);
+                    }
+                    else if (lname === 'table-column') {
+                        // Уже обработано в table:table
+                        continue;
+                    }
+                    else if (lname === 'table-header-rows') {
+                        const thead = document.createElement('thead');
+                        traverse(node, thead, curCtx);
+                        htmlParent.appendChild(thead);
+                    }
+                    else if (lname === 'table-row') {
+                        const trEl = document.createElement('tr');
+                        const rStyleName = getAttr(node, 'style-name');
+                        const rRes = styleEngine.resolve(rStyleName, 'table-row');
+                        if (rRes.row.height) trEl.style.height = rRes.row.height;
+                        if (rRes.row.backgroundColor) trEl.style.backgroundColor = rRes.row.backgroundColor;
+                        traverse(node, trEl, curCtx);
+                        htmlParent.appendChild(trEl);
+                    }
+                    else if (lname === 'table-cell') {
+                        const cStyleName = getAttr(node, 'style-name');
+                        const cRes = styleEngine.resolve(cStyleName, 'table-cell');
+                        const colspan = getAttr(node, 'number-columns-spanned');
+                        const rowspan = getAttr(node, 'number-rows-spanned');
+                        const repeated = parseInt(getAttr(node, 'number-columns-repeated') || '1', 10);
+
+                        // Ограничиваем пустые повторяющиеся ячейки (в LibreOffice Calc/Writer их бывает 1000)
+                        const isEmpty = node.textContent.trim() === '' && node.getElementsByTagName('*').length === 0;
+                        const count = isEmpty ? Math.min(repeated, 12) : Math.min(repeated, 20);
+
+                        for (let r = 0; r < count; r++) {
+                            const tdEl = document.createElement('td');
+                            if (colspan) tdEl.colSpan = parseInt(colspan, 10);
+                            if (rowspan) tdEl.rowSpan = parseInt(rowspan, 10);
+                            applyCellCss(tdEl, cRes.cell);
+                            if (r === 0) {
+                                traverse(node, tdEl, curCtx);
+                            }
+                            htmlParent.appendChild(tdEl);
+                        }
+                    }
+                    else if (lname === 'covered-table-cell') {
+                        // Скрытая ячейка под colspan/rowspan
+                        continue;
+                    }
+                    // Рамки, изображения и текстовые блоки (draw:frame, draw:image, draw:text-box)
+                    else if (lname === 'frame') {
+                        const fWidth = getAttr(node, 'width');
+                        const fStyleName = getAttr(node, 'style-name');
+                        const fRes = styleEngine.resolve(fStyleName, 'graphic');
+                        const anchorType = getAttr(node, 'anchor-type');
+
+                        const imgNode = getDirectChildByLocalName(node, 'image');
+                        const textBoxNode = getDirectChildByLocalName(node, 'text-box');
+
+                        if (imgNode) {
+                            const href = getAttr(imgNode, 'href');
+                            if (href && imageMap[href]) {
+                                const imgEl = document.createElement('img');
+                                imgEl.src = imageMap[href];
+                                imgEl.alt = getAttr(node, 'name') || 'Изображение';
+                                imgEl.loading = 'lazy';
+                                if (fWidth) imgEl.style.width = fWidth;
+                                if (fRes.graphic.border) imgEl.style.border = fRes.graphic.border;
+                                if (anchorType === 'paragraph' || fRes.graphic.horizontalPos === 'center') {
+                                    imgEl.className = 'lo-frame-block';
+                                }
+                                htmlParent.appendChild(imgEl);
+                            }
+                        } else if (textBoxNode) {
+                            const box = document.createElement('div');
+                            box.className = 'lo-textbox';
+                            if (fWidth) box.style.maxWidth = fWidth;
+                            if (fRes.graphic.border) box.style.border = fRes.graphic.border;
+                            traverse(textBoxNode, box, curCtx);
+                            htmlParent.appendChild(box);
+                        }
+                    }
+                    // Поля дат, номеров страниц и заголовков
+                    else if (lname === 'page-number') {
+                        htmlParent.appendChild(document.createTextNode('1'));
+                    }
+                    else if (lname === 'page-count') {
+                        htmlParent.appendChild(document.createTextNode('1'));
+                    }
+                    // Остальные контейнеры (text:section, text:index-body, table:table-rows и т.д.)
+                    else {
+                        traverse(node, htmlParent, curCtx);
+                    }
+                }
+            }
+        }
+
+        function parseMetaXml(metaXmlStr, fallbackTitle) {
+            try {
+                const doc = new DOMParser().parseFromString(metaXmlStr, 'application/xml');
+                const titleNode = getFirstByLocalName(doc, 'title');
+                const creatorNode = getFirstByLocalName(doc, 'creator') || getFirstByLocalName(doc, 'initial-creator');
+                return {
+                    title: (titleNode && titleNode.textContent.trim()) ? titleNode.textContent.trim() : fallbackTitle,
+                    creator: (creatorNode && creatorNode.textContent.trim()) ? creatorNode.textContent.trim() : ''
+                };
+            } catch (e) {
+                return { title: fallbackTitle, creator: '' };
+            }
+        }
+
+        async function extractEmbeddedImages(zip) {
+            const imageMap = {};
+            const tasks = [];
+            zip.forEach((relativePath, entry) => {
+                if (!entry.dir && (relativePath.startsWith('Pictures/') || /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(relativePath))) {
+                    const p = entry.async('blob').then(blob => {
+                        let finalBlob = blob;
+                        // Для SVG гарантируем правильный MIME-тип
+                        if (relativePath.toLowerCase().endsWith('.svg')) {
+                            finalBlob = new Blob([blob], { type: 'image/svg+xml' });
+                        }
+                        const url = URL.createObjectURL(finalBlob);
+                        state.blobUrls.push(url);
+                        imageMap[relativePath] = url;
+                        imageMap['./' + relativePath] = url;
+                    });
+                    tasks.push(p);
+                }
+            });
+            await Promise.all(tasks);
+            return imageMap;
+        }
+
+        /* =====================================================================
+           ОТОБРАЖЕНИЕ ДОКУМЕНТА И УПРАВЛЕНИЕ МАКЕТОМ LIBREOFFICE
+           ===================================================================== */
+        function renderDocumentToUI({ fileName, fileSizeKB, metaInfo, bodyHtml, headerHtml, footerHtml, footnotes }) {
+            document.getElementById('loading-spinner').classList.add('hidden');
+            document.getElementById('reader-container').classList.remove('hidden');
+            document.getElementById('bottom-controls').classList.remove('hidden');
+            document.getElementById('btn-toggle-search').classList.remove('hidden');
+
+            document.getElementById('header-filename').textContent = fileName;
+            document.getElementById('doc-meta-title').textContent = metaInfo.title;
+            document.getElementById('info-filename').textContent = fileName;
+            document.getElementById('info-pagesize').textContent = `${state.pageLayout.width} × ${state.pageLayout.height}`;
+
+            const authorRow = document.getElementById('info-author-row');
+            if (metaInfo.creator) {
+                document.getElementById('info-author').textContent = metaInfo.creator;
+                authorRow.classList.remove('hidden');
+            } else {
+                authorRow.classList.add('hidden');
+            }
+
+            // Применяем геометрию листа из styles.xml
+            const pageEl = document.getElementById('libre-page');
+            pageEl.style.width = state.pageLayout.width;
+            pageEl.style.minHeight = state.pageLayout.height;
+            pageEl.style.paddingTop = state.pageLayout.marginTop;
+            pageEl.style.paddingRight = state.pageLayout.marginRight;
+            pageEl.style.paddingBottom = state.pageLayout.marginBottom;
+            pageEl.style.paddingLeft = state.pageLayout.marginLeft;
+            if (state.pageLayout.backgroundColor && state.appearance !== 'night-paper') {
+                pageEl.style.backgroundColor = state.pageLayout.backgroundColor;
+            } else {
+                pageEl.style.backgroundColor = '';
+            }
+
+            // Верхний и нижний колонтитулы
+            const headerArea = document.getElementById('doc-header-area');
+            if (headerHtml && headerHtml.replace(/<[^>]+>/g, '').trim().length > 0) {
+                headerArea.innerHTML = headerHtml;
+                headerArea.classList.remove('hidden');
+            } else {
+                headerArea.innerHTML = '';
+                headerArea.classList.add('hidden');
+            }
+
+            const footerArea = document.getElementById('doc-footer-area');
+            if (footerHtml && footerHtml.replace(/<[^>]+>/g, '').trim().length > 0) {
+                footerArea.innerHTML = footerHtml;
+                footerArea.classList.remove('hidden');
+            } else {
+                footerArea.innerHTML = '';
+                footerArea.classList.add('hidden');
+            }
+
+            // Тело документа
+            const contentEl = document.getElementById('document-content');
+            contentEl.innerHTML = bodyHtml || '<p style="opacity:0.6;">Документ пуст.</p>';
+            state.rawDocumentHTML = contentEl.innerHTML;
+
+            // Сноски
+            const fnArea = document.getElementById('doc-footnotes-area');
+            if (footnotes.length > 0) {
+                fnArea.innerHTML = footnotes.map(f =>
+                    `<div id="${f.id}" style="display:flex; gap:6px; margin-bottom:4px;">
+                        <span style="font-weight:700; color:#1b75bc;">${f.num}.</span>
+                        <div>${f.html}</div>
+                    </div>`
+                ).join('');
+                fnArea.classList.remove('hidden');
+            } else {
+                fnArea.innerHTML = '';
+                fnArea.classList.add('hidden');
+            }
+
+            // Статистика
+            const plainText = contentEl.innerText || '';
+            const words = plainText.trim().split(/\s+/).filter(Boolean).length;
+            document.getElementById('doc-stats-pill').textContent = `${words.toLocaleString('ru-RU')} слов · ${fileSizeKB} КБ`;
+            document.getElementById('info-stats').textContent = `${fileSizeKB} КБ / ${words.toLocaleString('ru-RU')} слов`;
+
+            buildTableOfContents();
+            state.pageZoom = 1;
+            state.fontScale = 1;
+            updateViewModeUI();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        /**
+         * Переключение режима: "Лист A4 (как в LibreOffice)" <-> "Адаптивный мобильный"
+         */
+        function setViewMode(mode) {
+            state.viewMode = mode;
+            updateViewModeUI();
+        }
+
+        function updateViewModeUI() {
+            const pageEl = document.getElementById('libre-page');
+            const scaleWrapper = document.getElementById('page-scale-wrapper');
+            const btnPage = document.getElementById('mode-btn-page');
+            const btnReflow = document.getElementById('mode-btn-reflow');
+
+            if (state.viewMode === 'page') {
+                pageEl.classList.remove('mode-reflow');
+                pageEl.classList.add('mode-page');
+                btnPage.classList.add('bg-loBlue', 'text-white', 'shadow-sm');
+                btnReflow.classList.remove('bg-loBlue', 'text-white', 'shadow-sm');
+                document.documentElement.style.setProperty('--doc-font-scale', '1');
+                applyPageTransform();
+            } else {
+                pageEl.classList.remove('mode-page');
+                pageEl.classList.add('mode-reflow');
+                btnReflow.classList.add('bg-loBlue', 'text-white', 'shadow-sm');
+                btnPage.classList.remove('bg-loBlue', 'text-white', 'shadow-sm');
+                pageEl.style.transform = 'none';
+                scaleWrapper.style.width = '100%';
+                scaleWrapper.style.height = 'auto';
+                document.documentElement.style.setProperty('--doc-font-scale', String(state.fontScale));
+                document.getElementById('zoom-label').textContent = `${Math.round(state.fontScale * 100)}%`;
+            }
+        }
+
+        /**
+         * Автоматическое масштабирование листа A4 под ширину экрана смартфона + ручной зум
+         */
+        function applyPageTransform() {
+            if (state.viewMode !== 'page') return;
+            const viewport = document.getElementById('page-viewport');
+            const pageEl = document.getElementById('libre-page');
+            const scaleWrapper = document.getElementById('page-scale-wrapper');
+            if (!viewport || !pageEl) return;
+
+            // Временно сбрасываем transform, чтобы измерить реальные размеры листа A4 в пикселях
+            pageEl.style.transform = 'none';
+            const naturalWidth = pageEl.offsetWidth || 794;
+            const naturalHeight = pageEl.offsetHeight || 1123;
+            const availWidth = Math.max(280, viewport.clientWidth - 8);
+
+            const fitScale = Math.min(1, availWidth / naturalWidth);
+            const finalScale = Math.max(0.35, Math.min(2.2, fitScale * state.pageZoom));
+
+            pageEl.style.transform = `scale(${finalScale})`;
+            scaleWrapper.style.width = `${Math.ceil(naturalWidth * finalScale)}px`;
+            scaleWrapper.style.height = `${Math.ceil(naturalHeight * finalScale)}px`;
+
+            document.getElementById('zoom-label').textContent = `${Math.round(state.pageZoom * 100)}%`;
+        }
+
+        function adjustZoom(delta) {
+            if (state.viewMode === 'page') {
+                state.pageZoom = Math.max(0.6, Math.min(2.5, Number((state.pageZoom + delta * 0.15).toFixed(2))));
+                applyPageTransform();
+            } else {
+                state.fontScale = Math.max(0.75, Math.min(1.8, Number((state.fontScale + delta * 0.1).toFixed(2))));
+                document.documentElement.style.setProperty('--doc-font-scale', String(state.fontScale));
+                document.getElementById('zoom-label').textContent = `${Math.round(state.fontScale * 100)}%`;
+            }
+        }
+
+        function resetZoom() {
+            state.pageZoom = 1;
+            state.fontScale = 1;
+            updateViewModeUI();
+        }
+
+        /**
+         * Переключение темы рабочей области
+         */
+        function setAppearance(mode) {
+            state.appearance = mode;
+            document.body.classList.remove('ui-dark', 'paper-night');
+            const pageEl = document.getElementById('libre-page');
+
+            if (mode === 'libre-dark') {
+                document.body.classList.add('ui-dark');
+                if (state.pageLayout.backgroundColor) pageEl.style.backgroundColor = state.pageLayout.backgroundColor;
+            } else if (mode === 'night-paper') {
+                document.body.classList.add('ui-dark', 'paper-night');
+                pageEl.style.backgroundColor = '';
+            } else {
+                if (state.pageLayout.backgroundColor) pageEl.style.backgroundColor = state.pageLayout.backgroundColor;
+            }
+            updateAppearanceUI();
+        }
+
+        function updateAppearanceUI() {
+            ['libre-light', 'libre-dark', 'night-paper'].forEach(key => {
+                const btn = document.getElementById(`app-btn-${key}`);
+                if (!btn) return;
+                if (state.appearance === key) {
+                    btn.classList.add('bg-loBlue', 'text-white', 'border-loBlue');
+                    btn.classList.remove('lo-surface-2');
+                } else {
+                    btn.classList.remove('bg-loBlue', 'text-white', 'border-loBlue');
+                    btn.classList.add('lo-surface-2');
+                }
+            });
+        }
+
+        /* =====================================================================
+           ОГЛАВЛЕНИЕ (TOC), ШТОРКИ И ПОИСК ПО ТЕКСТУ
+           ===================================================================== */
+        function buildTableOfContents() {
+            const tocList = document.getElementById('toc-list');
+            const headings = document.querySelectorAll('#document-content h1, #document-content h2, #document-content h3, #document-content h4');
+            tocList.innerHTML = '';
+
+            if (headings.length === 0) {
+                tocList.innerHTML = '<div class="py-6 text-center opacity-60">Заголовки в документе не найдены.</div>';
+                return;
+            }
+
+            headings.forEach(h => {
+                const lvl = parseInt(h.tagName.replace('H', ''), 10);
+                const btn = document.createElement('button');
+                btn.className = 'w-full text-left py-2.5 px-3 rounded-xl lo-surface-2 border hover:border-loBlue transition flex items-center gap-2 active:scale-[0.99]';
+                btn.style.paddingLeft = `${12 + (lvl - 1) * 14}px`;
+                btn.innerHTML = `<span class="text-[11px] font-bold text-loBlue shrink-0">H${lvl}</span><span class="truncate">${escapeHtml(h.textContent.trim() || 'Раздел')}</span>`;
+                btn.onclick = () => {
+                    closeAllDrawers();
+                    h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                };
+                tocList.appendChild(btn);
+            });
+        }
+
+        function toggleDrawer(id) {
+            const el = document.getElementById(id);
+            const isHidden = el.classList.contains('hidden');
+            closeAllDrawers();
+            if (isHidden) el.classList.remove('hidden');
+        }
+
+        function closeAllDrawers() {
+            document.getElementById('toc-drawer').classList.add('hidden');
+            document.getElementById('settings-drawer').classList.add('hidden');
+        }
+
+        function toggleSearchBar() {
+            const bar = document.getElementById('search-bar');
+            const input = document.getElementById('search-input');
+            if (bar.classList.contains('hidden')) {
+                bar.classList.remove('hidden');
+                input.focus();
+            } else {
+                clearSearch();
+            }
+        }
+
+        function setupSearchInput() {
+            const input = document.getElementById('search-input');
+            let timer;
+            input.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(() => performSearch(input.value.trim()), 200);
+            });
+        }
+
+        function performSearch(query) {
+            const contentEl = document.getElementById('document-content');
+            if (!state.rawDocumentHTML) return;
+            contentEl.innerHTML = state.rawDocumentHTML;
+            state.searchMatches = [];
+            state.currentMatchIdx = -1;
+
+            if (!query || query.length < 2) {
+                document.getElementById('search-counter').textContent = '0/0';
+                return;
+            }
+
+            const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escaped})`, 'gi');
+            const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            let node;
+            while ((node = walker.nextNode())) {
+                if (node.nodeValue.trim().length > 0) textNodes.push(node);
+            }
+
+            textNodes.forEach(tn => {
+                const text = tn.nodeValue;
+                if (regex.test(text)) {
+                    const frag = document.createDocumentFragment();
+                    let last = 0;
+                    text.replace(regex, (match, p1, offset) => {
+                        if (offset > last) frag.appendChild(document.createTextNode(text.slice(last, offset)));
+                        const mark = document.createElement('mark');
+                        mark.className = 'search-match';
+                        mark.textContent = match;
+                        frag.appendChild(mark);
+                        state.searchMatches.push(mark);
+                        last = offset + match.length;
+                    });
+                    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+                    tn.parentNode.replaceChild(frag, tn);
+                }
+            });
+
+            if (state.searchMatches.length > 0) {
+                navigateSearch(1);
+            } else {
+                document.getElementById('search-counter').textContent = '0/0';
+            }
+        }
+
+        function navigateSearch(dir) {
+            const total = state.searchMatches.length;
+            if (!total) return;
+            if (state.currentMatchIdx >= 0 && state.searchMatches[state.currentMatchIdx]) {
+                state.searchMatches[state.currentMatchIdx].classList.remove('active-match');
+            }
+            state.currentMatchIdx = (state.currentMatchIdx + dir + total) % total;
+            const el = state.searchMatches[state.currentMatchIdx];
+            el.classList.add('active-match');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            document.getElementById('search-counter').textContent = `${state.currentMatchIdx + 1}/${total}`;
+        }
+
+        function clearSearch(hideBar = true) {
+            document.getElementById('search-input').value = '';
+            document.getElementById('search-counter').textContent = '0/0';
+            if (state.rawDocumentHTML) {
+                document.getElementById('document-content').innerHTML = state.rawDocumentHTML;
+            }
+            state.searchMatches = [];
+            state.currentMatchIdx = -1;
+            if (hideBar) document.getElementById('search-bar').classList.add('hidden');
+        }
+
+        function showStatus(msg) {
+            document.getElementById('status-message').textContent = msg;
+            document.getElementById('status-banner').classList.remove('hidden');
+        }
+
+        function hideStatus() {
+            document.getElementById('status-banner').classList.add('hidden');
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+
+        /* =====================================================================
+           ДЕМО-ДОКУМЕНТ LIBREOFFICE WRITER (.ODT с styles.xml, таблицами, SVG)
+           ===================================================================== */
+        async function loadSampleODT() {
+            const zip = new JSZip();
+            zip.file('mimetype', 'application/vnd.oasis.opendocument.text');
+
+            const metaXml = `<?xml version="1.0" encoding="UTF-8"?>
+            <office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:dc="http://purl.org/dc/elements/1.1/">
+                <office:meta>
+                    <dc:title>Спецификация проекта — LibreOffice Writer</dc:title>
+                    <dc:creator>LibreODT Engine</dc:creator>
+                </office:meta>
+            </office:document-meta>`;
+
+            const stylesXml = `<?xml version="1.0" encoding="UTF-8"?>
+            <office:document-styles
+                xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+                xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+                xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+                xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+                <office:font-face-decls>
+                    <style:font-face style:name="Liberation Serif" svg:font-family="'Liberation Serif'"/>
+                    <style:font-face style:name="Liberation Sans" svg:font-family="'Liberation Sans'"/>
+                    <style:font-face style:name="Liberation Mono" svg:font-family="'Liberation Mono'"/>
+                </office:font-face-decls>
+                <office:styles>
+                    <style:default-style style:family="paragraph">
+                        <style:paragraph-properties fo:line-height="130%"/>
+                        <style:text-properties style:font-name="Liberation Serif" fo:font-size="12pt" fo:color="#000000"/>
+                    </style:default-style>
+                    <style:style style:name="Title" style:family="paragraph">
+                        <style:paragraph-properties fo:text-align="center" fo:margin-bottom="0.2cm"/>
+                        <style:text-properties style:font-name="Liberation Sans" fo:font-size="22pt" fo:font-weight="bold" fo:color="#1b365d"/>
+                    </style:style>
+                    <style:style style:name="Subtitle" style:family="paragraph">
+                        <style:paragraph-properties fo:text-align="center" fo:margin-bottom="0.6cm"/>
+                        <style:text-properties style:font-name="Liberation Sans" fo:font-size="12pt" fo:font-style="italic" fo:color="#556070"/>
+                    </style:style>
+                    <style:style style:name="Heading_20_1" style:family="paragraph">
+                        <style:paragraph-properties fo:margin-top="0.5cm" fo:margin-bottom="0.25cm" fo:border-bottom="1pt solid #1b75bc" fo:padding-bottom="0.1cm"/>
+                        <style:text-properties style:font-name="Liberation Sans" fo:font-size="15pt" fo:font-weight="bold" fo:color="#1b75bc"/>
+                    </style:style>
+                    <style:style style:name="Heading_20_2" style:family="paragraph">
+                        <style:paragraph-properties fo:margin-top="0.4cm" fo:margin-bottom="0.2cm"/>
+                        <style:text-properties style:font-name="Liberation Sans" fo:font-size="13pt" fo:font-weight="bold" fo:color="#2c3e50"/>
+                    </style:style>
+                    <style:style style:name="BodyIndent" style:family="paragraph">
+                        <style:paragraph-properties fo:text-align="justify" fo:text-indent="1.25cm" fo:margin-bottom="0.25cm"/>
+                    </style:style>
+                    <style:style style:name="Quotations" style:family="paragraph">
+                        <style:paragraph-properties fo:margin-left="1cm" fo:margin-right="0.5cm" fo:padding="0.25cm" fo:background-color="#f1f5f9" fo:border-left="3pt solid #1b75bc"/>
+                        <style:text-properties fo:font-style="italic" fo:color="#334155"/>
+                    </style:style>
+                    <text:list-style style:name="LO_Numbered">
+                        <text:list-level-style-number text:level="1" style:num-format="1"/>
+                    </text:list-style>
+                    <text:list-style style:name="LO_Bulleted">
+                        <text:list-level-style-bullet text:level="1" text:bullet-char="•"/>
+                    </text:list-style>
+                </office:styles>
+                <office:automatic-styles>
+                    <style:page-layout style:name="pm1">
+                        <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2.5cm" fo:margin-right="2cm"/>
+                    </style:page-layout>
+                </office:automatic-styles>
+                <office:master-styles>
+                    <style:master-page style:name="Standard" style:page-layout-name="pm1">
+                        <style:header>
+                            <text:p>LibreOffice Writer — Образец форматирования OpenDocument (.odt)</text:p>
+                        </style:header>
+                        <style:footer>
+                            <text:p>Сформировано локально · Страница <text:page-number/> из <text:page-count/></text:p>
+                        </style:footer>
+                    </style:master-page>
+                </office:master-styles>
+            </office:document-styles>`;
+
+            const contentXml = `<?xml version="1.0" encoding="UTF-8"?>
+            <office:document-content
+                xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+                xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+                xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+                xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+                xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+                xmlns:xlink="http://www.w3.org/1999/xlink"
+                xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+                <office:automatic-styles>
+                    <style:style style:name="T_Bold" style:family="text"><style:text-properties fo:font-weight="bold"/></style:style>
+                    <style:style style:name="T_Highlight" style:family="text"><style:text-properties fo:background-color="#fff176" fo:font-weight="bold"/></style:style>
+                    <style:style style:name="T_RedStrike" style:family="text"><style:text-properties fo:color="#c62828" style:text-line-through-style="solid"/></style:style>
+                    <style:style style:name="T_Mono" style:family="text"><style:text-properties style:font-name="Liberation Mono" fo:font-size="10.5pt" fo:background-color="#eceff1" fo:color="#0d47a1"/></style:style>
+                    <style:style style:name="T_Super" style:family="text"><style:text-properties style:text-position="super 58%"/></style:style>
+                    <style:style style:name="TH_Cell" style:family="table-cell">
+                        <style:table-cell-properties fo:background-color="#1b75bc" fo:border="0.75pt solid #145a91" fo:padding="0.18cm"/>
+                    </style:style>
+                    <style:style style:name="TH_Text" style:family="text">
+                        <style:text-properties style:font-name="Liberation Sans" fo:font-weight="bold" fo:color="#ffffff" fo:font-size="10.5pt"/>
+                    </style:style>
+                    <style:style style:name="TD_Cell" style:family="table-cell">
+                        <style:table-cell-properties fo:border="0.5pt solid #b0bec5" fo:padding="0.16cm"/>
+                    </style:style>
+                    <style:style style:name="TD_Alt" style:family="table-cell">
+                        <style:table-cell-properties fo:background-color="#f8fafc" fo:border="0.5pt solid #b0bec5" fo:padding="0.16cm"/>
+                    </style:style>
+                    <style:style style:name="Col1" style:family="table-column"><style:table-column-properties style:column-width="4.5cm"/></style:style>
+                    <style:style style:name="Col2" style:family="table-column"><style:table-column-properties style:column-width="7.5cm"/></style:style>
+                    <style:style style:name="Col3" style:family="table-column"><style:table-column-properties style:column-width="4.5cm"/></style:style>
+                    <style:style style:name="ImgCenter" style:family="graphic"><style:graphic-properties style:horizontal-pos="center"/></style:style>
+                </office:automatic-styles>
+                <office:body>
+                    <office:text>
+                        <text:p text:style-name="Title">Отчёт совместимости LibreOffice</text:p>
+                        <text:p text:style-name="Subtitle">Точное отображение полей A4, стилей абзацев, таблиц и графики</text:p>
+
+                        <text:h text:outline-level="1" text:style-name="Heading_20_1">1. Типографика и красная строка</text:h>
+                        <text:p text:style-name="BodyIndent">Этот абзац отформатирован по ширине (justify) с красной строкой <text:span text:style-name="T_Bold">1.25 см</text:span>, как в классических документах LibreOffice Writer. Поддерживаются <text:span text:style-name="T_Highlight">маркер выделения</text:span>, <text:span text:style-name="T_RedStrike">зачёркнутый цветной текст</text:span>, моноширинный код <text:span text:style-name="T_Mono">styles.xml</text:span>, степени вроде E = mc<text:span text:style-name="T_Super">2</text:span> и автоматические сноски<text:note text:note-class="footnote"><text:note-citation>1</text:note-citation><text:note-body><text:p>Сноски автоматически собираются в нижней части листа с кликабельным переходом.</text:p></text:note-body></text:note>.</text:p>
+
+                        <text:p text:style-name="Quotations">«В верхней панели документа вы можете мгновенно переключиться между режимом точного листа A4 (1:1 как на ПК) и адаптивной мобильной версткой.»</text:p>
+
+                        <text:h text:outline-level="1" text:style-name="Heading_20_1">2. Стилизованная таблица</text:h>
+                        <table:table>
+                            <table:table-column table:style-name="Col1"/>
+                            <table:table-column table:style-name="Col2"/>
+                            <table:table-column table:style-name="Col3"/>
+                            <table:table-header-rows>
+                                <table:table-row>
+                                    <table:table-cell table:style-name="TH_Cell"><text:p><text:span text:style-name="TH_Text">Компонент ODT</text:span></text:p></table:table-cell>
+                                    <table:table-cell table:style-name="TH_Cell"><text:p><text:span text:style-name="TH_Text">Поддерживаемые свойства</text:span></text:p></table:table-cell>
+                                    <table:table-cell table:style-name="TH_Cell"><text:p><text:span text:style-name="TH_Text">Статус</text:span></text:p></table:table-cell>
+                                </table:table-row>
+                            </table:table-header-rows>
+                            <table:table-row>
+                                <table:table-cell table:style-name="TD_Cell"><text:p><text:span text:style-name="T_Bold">styles.xml</text:span></text:p></table:table-cell>
+                                <table:table-cell table:style-name="TD_Cell"><text:p>Наследование стилей, шрифты, поля A4, колонтитулы</text:p></table:table-cell>
+                                <table:table-cell table:style-name="TD_Cell"><text:p>Активно</text:p></table:table-cell>
+                            </table:table-row>
+                            <table:table-row>
+                                <table:table-cell table:style-name="TD_Alt"><text:p><text:span text:style-name="T_Bold">table:table</text:span></text:p></table:table-cell>
+                                <table:table-cell table:style-name="TD_Alt"><text:p>Заливка ячеек, границы, ширина столбцов, объединение</text:p></table:table-cell>
+                                <table:table-cell table:style-name="TD_Alt"><text:p>Активно</text:p></table:table-cell>
+                            </table:table-row>
+                            <table:table-row>
+                                <table:table-cell table:style-name="TD_Cell"><text:p><text:span text:style-name="T_Bold">Pictures/</text:span></text:p></table:table-cell>
+                                <table:table-cell table:style-name="TD_Cell"><text:p>Встроенные PNG, JPEG, WebP и векторные SVG</text:p></table:table-cell>
+                                <table:table-cell table:style-name="TD_Cell"><text:p>Активно</text:p></table:table-cell>
+                            </table:table-row>
+                        </table:table>
+
+                        <text:h text:outline-level="2" text:style-name="Heading_20_2">3. Списки и встроенная графика</text:h>
+                        <text:list text:style-name="LO_Numbered">
+                            <text:list-item><text:p>Нажмите <text:span text:style-name="T_Bold">«APK .ZIP»</text:span> в правом верхнем углу.</text:p></text:list-item>
+                            <text:list-item><text:p>Скачайте архив со всеми оффлайн-библиотеками и Kotlin-проектом Android.</text:p></text:list-item>
+                            <text:list-item><text:p>Скомпилируйте готовый <text:span text:style-name="T_Mono">.apk</text:span> через Android Studio или GitHub Actions.</text:p></text:list-item>
+                        </text:list>
+
+                        <text:p>
+                            <draw:frame draw:style-name="ImgCenter" draw:name="Diagram" text:anchor-type="paragraph" svg:width="12cm">
+                                <draw:image xlink:href="Pictures/architecture.svg"/>
+                            </draw:frame>
+                        </text:p>
+                    </office:text>
+                </office:body>
+            </office:document-content>`;
+
+            const sampleSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 130" width="540" height="130">
+                <rect x="2" y="2" width="536" height="126" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+                <rect x="20" y="34" width="130" height="62" rx="10" fill="#1b75bc"/>
+                <text x="85" y="62" fill="#ffffff" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle">.ODT Архив</text>
+                <text x="85" y="80" fill="#dbeafe" font-family="Arial, sans-serif" font-size="10" text-anchor="middle">XML + Pictures</text>
+                <path d="M156 65 L196 65" stroke="#64748b" stroke-width="2.5" marker-end="url(#arr)"/>
+                <rect x="205" y="34" width="130" height="62" rx="10" fill="#0f766e"/>
+                <text x="270" y="62" fill="#ffffff" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle">LibreODT</text>
+                <text x="270" y="80" fill="#ccfbf1" font-family="Arial, sans-serif" font-size="10" text-anchor="middle">styles.xml Engine</text>
+                <path d="M341 65 L381 65" stroke="#64748b" stroke-width="2.5"/>
+                <rect x="390" y="34" width="130" height="62" rx="10" fill="#1e293b"/>
+                <text x="455" y="62" fill="#ffffff" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle">Android APK</text>
+                <text x="455" y="80" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="10" text-anchor="middle">100% Оффлайн</text>
+            </svg>`;
+
+            zip.file('meta.xml', metaXml);
+            zip.file('styles.xml', stylesXml);
+            zip.file('content.xml', contentXml);
+            zip.file('Pictures/architecture.svg', sampleSvg);
+
+            const blob = await zip.generateAsync({ type: 'blob' });
+            await processODTFile(blob, 'LibreOffice_Demo_Report.odt');
+        }
+
+        /* =====================================================================
+           ГЕНЕРАТОР .ZIP АРХИВА СО ВСЕМИ БИБЛИОТЕКАМИ ДЛЯ КОМПИЛЯЦИИ .APK
+           ===================================================================== */
+        function openApkModal() {
+            document.getElementById('apk-modal').classList.remove('hidden');
+            document.getElementById('apk-build-log').classList.add('hidden');
+        }
+
+        function closeApkModal() {
+            document.getElementById('apk-modal').classList.add('hidden');
+        }
+
+        async function generateAndroidApkZip() {
+            const btn = document.getElementById('btn-start-apk-zip');
+            const logEl = document.getElementById('apk-build-log');
+            logEl.classList.remove('hidden');
+            logEl.innerHTML = '';
+
+            const log = (line) => {
+                logEl.innerHTML += `<div>&gt; ${escapeHtml(line)}</div>`;
+                logEl.scrollTop = logEl.scrollHeight;
+            };
+
+            const appName = (document.getElementById('apk-app-name').value || 'LibreODT Reader').trim();
+            let packageId = (document.getElementById('apk-package-id').value || 'com.libreodt.reader').trim().toLowerCase().replace(/[^a-z0-9._]/g, '');
+            if (!packageId.includes('.')) packageId = 'com.libreodt.reader';
+            const versionName = (document.getElementById('apk-version').value || '1.0.0').trim();
+            const packagePath = packageId.replace(/\./g, '/');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-60');
+
+            try {
+                const zip = new JSZip();
+                log('Инициализация структуры Android Gradle проекта...');
+
+                // 1. Загружаем реальную библиотеку jszip.min.js для 100% оффлайн-работы APK
+                log('Загрузка локальной библиотеки libs/jszip.min.js...');
+                let jszipCode = '';
+                try {
+                    const resp = await fetch('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+                    if (resp.ok) {
+                        jszipCode = await resp.text();
+                        log(`JSZip 3.10.1 упакован (${Math.round(jszipCode.length / 1024)} КБ).`);
+                    } else {
+                        throw new Error('HTTP ' + resp.status);
+                    }
+                } catch (fetchErr) {
+                    log('Внимание: не удалось скачать jszip.min.js (ограничение сети). Добавлена инструкция в libs/README.txt.');
+                    jszipCode = '/* Скачайте https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js и замените этот файл */\n';
+                }
+
+                // 2. Извлекаем весь скомпилированный Tailwind CSS + наши стили LibreOffice прямо из DOM
+                log('Извлечение скомпилированного CSS (Tailwind + LibreOffice Engine)...');
+                const compiledCss = extractCompiledStylesForOfflineApk();
+                log(`Стили собраны (${Math.round(compiledCss.length / 1024)} КБ).`);
+
+                // 3. Генерируем полностью автономный index.html для Android assets/www/
+                log('Сборка автономного assets/www/index.html...');
+                const offlineHtml = buildOfflineIndexHtml(appName);
+
+                // Кладем веб-ресурсы и библиотеки в app/src/main/assets/www/
+                const wwwDir = 'app/src/main/assets/www';
+                zip.file(`${wwwDir}/index.html`, offlineHtml);
+                zip.file(`${wwwDir}/libs/jszip.min.js`, jszipCode);
+                zip.file(`${wwwDir}/libs/styles.css`, compiledCss);
+
+                // 4. Генерируем файлы конфигурации Gradle
+                log('Генерация Gradle-конфигурации (Android SDK 34, Kotlin)...');
+
+                zip.file('settings.gradle.kts', `pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "${appName.replace(/"/g, '')}"
+include(":app")
+`);
+
+                zip.file('build.gradle.kts', `plugins {
+    id("com.android.application") version "8.5.2" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+}
+`);
+
+                zip.file('gradle.properties', `org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.enableJetifier=false
+kotlin.code.style=official
+`);
+
+                zip.file('app/build.gradle.kts', `plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "${packageId}"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "${packageId}"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = "${versionName}"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.webkit:webkit:1.11.0")
+}
+`);
+
+                zip.file('app/proguard-rules.pro', `# Keep WebView JS interfaces
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+`);
+
+                // 5. AndroidManifest.xml с Intent-фильтром для открытия .odt файлов из Telegram/проводника
+                log('Генерация AndroidManifest.xml (ассоциация файлов .odt)...');
+                zip.file('app/src/main/AndroidManifest.xml', `<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LibreODT"
+        android:hardwareAccelerated="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode">
+
+            <!-- Запуск с главного экрана -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Открытие .odt файлов из Проводника, Telegram, Почты и других приложений -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.oasis.opendocument.text" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\\\.odt" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>
+`);
+
+                // 6. MainActivity.kt (Kotlin WebView + системный выбор файлов + чтение входящего Intent .odt)
+                log('Генерация MainActivity.kt...');
+                zip.file(`app/src/main/java/${packagePath}/MainActivity.kt`, `package ${packageId}
+
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import android.provider.OpenableColumns
+import android.util.Base64
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import org.json.JSONObject
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var webView: WebView
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingIntentUri: Uri? = null
+    private var pageLoaded = false
+
+    // Системный выбор .odt файла для <input type="file"> внутри WebView
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            filePathCallback?.onReceiveValue(arrayOf(uri))
+        } else {
+            filePathCallback?.onReceiveValue(null)
+        }
+        filePathCallback = null
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        webView = WebView(this)
+        setContentView(webView)
+
+        val settings = webView.settings
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.allowFileAccess = true
+        settings.allowContentAccess = true
+        settings.builtInZoomControls = true
+        settings.displayZoomControls = false
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
+        settings.cacheMode = WebSettings.LOAD_DEFAULT
+        settings.userAgentString = settings.userAgentString + " LibreODTAndroidAPK"
+
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                pageLoaded = true
+                pendingIntentUri?.let { uri ->
+                    loadOdtUriIntoWebView(uri)
+                    pendingIntentUri = null
+                }
+            }
+        }
+
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView?,
+                callback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                filePathCallback?.onReceiveValue(null)
+                filePathCallback = callback
+                fileChooserLauncher.launch(arrayOf(
+                    "application/vnd.oasis.opendocument.text",
+                    "*/*"
+                ))
+                return true
+            }
+        }
+
+        // Обработка системной кнопки «Назад»
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
+
+        handleIncomingIntent(intent)
+        webView.loadUrl("file:///android_asset/www/index.html")
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW && intent.data != null) {
+            val uri = intent.data!!
+            if (pageLoaded) {
+                loadOdtUriIntoWebView(uri)
+            } else {
+                pendingIntentUri = uri
+            }
+        }
+    }
+
+    private fun loadOdtUriIntoWebView(uri: Uri) {
+        try {
+            val fileName = getDisplayName(uri) ?: "document.odt"
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return
+            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val safeName = JSONObject.quote(fileName)
+            webView.post {
+                webView.evaluateJavascript("window.openOdtFromAndroidBase64('$base64', $safeName);", null)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun getDisplayName(uri: Uri): String? {
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (idx >= 0 && cursor.moveToFirst()) {
+                return cursor.getString(idx)
+            }
+        }
+        return uri.lastPathSegment
+    }
+}
+`);
+
+                // 7. Ресурсы Android (strings, themes, иконка)
+                log('Добавление ресурсов и иконки приложения...');
+                zip.file('app/src/main/res/values/strings.xml', `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">${escapeXml(appName)}</string>
+</resources>
+`);
+
+                zip.file('app/src/main/res/values/themes.xml', `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LibreODT" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:statusBarColor">#1b75bc</item>
+    </style>
+</resources>
+`);
+
+                zip.file('app/src/main/res/drawable/ic_launcher_background.xml', `<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#1B75BC" android:pathData="M0,0h108v108h-108z"/>
+</vector>
+`);
+
+                zip.file('app/src/main/res/drawable/ic_launcher_foreground.xml', `<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,24 L62,24 L74,36 L74,84 L34,84 Z"/>
+    <path
+        android:fillColor="#93C5FD"
+        android:pathData="M62,24 L62,36 L74,36 Z"/>
+    <path
+        android:fillColor="#1B75BC"
+        android:pathData="M42,48 H66 V52 H42 Z M42,58 H66 V62 H42 Z M42,68 H58 V72 H42 Z"/>
+</vector>
+`);
+
+                zip.file('app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+</adaptive-icon>
+`);
+
+                // 8. GitHub Actions workflow для облачной компиляции APK без установки Android Studio
+                log('Добавление .github/workflows/build-apk.yml для автосборки APK...');
+                zip.file('.github/workflows/build-apk.yml', `name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build Debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreODT-Reader-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+`);
+
+                // 9. Подробная инструкция README.md
+                zip.file('README.md', `# ${appName} — Проект Android APK
+
+Готовый оффлайн-проект для компиляции Android-приложения **.apk** с движком рендеринга **LibreOffice Writer (.odt)**.
+
+## Что внутри архива
+- \`app/src/main/assets/www/index.html\` — автономный ODT-ридер без внешних CDN.
+- \`app/src/main/assets/www/libs/jszip.min.js\` — локальная библиотека JSZip.
+- \`app/src/main/assets/www/libs/styles.css\` — все скомпилированные стили интерфейса и листа LibreOffice.
+- \`app/src/main/java/${packagePath}/MainActivity.kt\` — нативный WebView с системным выбором файлов и поддержкой открытия \`.odt\` напрямую из Telegram, почты и Файлового менеджера.
+- \`.github/workflows/build-apk.yml\` — готовый сценарий облачной сборки APK.
+
+---
+
+## Способ 1: Собрать APK через Android Studio (на ПК)
+1. Распакуйте архив в отдельную папку.
+2. Откройте папку в **Android Studio** (File -> Open).
+3. Дождитесь завершения синхронизации Gradle.
+4. Нажмите **Build -> Build Bundle(s) / APK(s) -> Build APK(s)**.
+5. Готовый файл появится в \`app/build/outputs/apk/debug/app-debug.apk\`.
+
+## Способ 2: Собрать APK через командную строку (Gradle 8.7 + JDK 17)
+\`\`\`bash
+gradle assembleDebug
+\`\`\`
+
+## Способ 3: Собрать APK в облаке через GitHub (даже с телефона!)
+1. Создайте новый репозиторий на GitHub и загрузите туда распакованные файлы.
+2. Перейдите во вкладку **Actions -> Build Android APK -> Run workflow**.
+3. Через 2 минуты скачайте готовый \`app-debug.apk\` из раздела **Artifacts**.
+`);
+
+                log('Упаковка финального .ZIP архива...');
+                const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+
+                const safeFileSlug = appName.replace(/[^a-zA-Z0-9_-]+/g, '_') || 'LibreODT_Reader';
+                const dlUrl = URL.createObjectURL(zipBlob);
+                const a = document.createElement('a');
+                a.href = dlUrl;
+                a.download = `${safeFileSlug}_APK_Project.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(dlUrl), 4000);
+
+                log(`Готово! Файл ${safeFileSlug}_APK_Project.zip (${Math.round(zipBlob.size / 1024)} КБ) скачан.`);
+            } catch (err) {
+                console.error(err);
+                log('Ошибка сборки ZIP: ' + (err.message || err));
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-60');
+            }
+        }
+
+        /**
+         * Извлекает все активные CSS-правила (включая сгенерированные Tailwind CDN) для 100% оффлайн-работы в APK
+         */
+        function extractCompiledStylesForOfflineApk() {
+            const chunks = [];
+            const styleTags = document.querySelectorAll('style');
+            styleTags.forEach(tag => {
+                if (tag.textContent && tag.textContent.trim().length > 0) {
+                    chunks.push(tag.textContent);
+                }
+            });
+            // Гарантированные утилитарные классы для динамических состояний в оффлайн-APK
+            chunks.push(`
+/* Offline APK safety helpers */
+.hidden { display: none !important; }
+.bg-loBlue { background-color: #1b75bc !important; }
+.text-loBlue { color: #1b75bc !important; }
+.border-loBlue { border-color: #1b75bc !important; }
+.text-white { color: #ffffff !important; }
+`);
+            return chunks.join('\n\n');
+        }
+
+        /**
+         * Формирует полностью оффлайн index.html (заменяет CDN-ссылки на ./libs/styles.css и ./libs/jszip.min.js)
+         */
+        function buildOfflineIndexHtml(appName) {
+            const clone = document.documentElement.cloneNode(true);
+
+            // Убираем CDN-скрипты (Tailwind, JSZip CDN), Google Fonts и inline-стили (они вынесены в libs/styles.css)
+            const head = clone.querySelector('head');
+            const toRemove = head.querySelectorAll('script, link[rel="stylesheet"], link[rel="preconnect"], style');
+            toRemove.forEach(node => node.remove());
+
+            // Обновляем заголовок
+            const titleEl = head.querySelector('title');
+            if (titleEl) titleEl.textContent = appName;
+
+            // Подключаем локальные оффлайн-библиотеки из ./libs/
+            const cssLink = document.createElement('link');
+            cssLink.rel = 'stylesheet';
+            cssLink.href = './libs/styles.css';
+            head.appendChild(cssLink);
+
+            const jszipScript = document.createElement('script');
+            jszipScript.src = './libs/jszip.min.js';
+            head.appendChild(jszipScript);
+
+            const apkFlag = document.createElement('script');
+            apkFlag.textContent = 'window.__IS_ANDROID_APK__ = true;';
+            head.appendChild(apkFlag);
+
+            // Сбрасываем динамическое состояние DOM к чистому стартовому экрану
+            const body = clone.querySelector('body');
+            body.classList.remove('ui-dark', 'paper-night');
+            const welcome = body.querySelector('#welcome-screen');
+            const reader = body.querySelector('#reader-container');
+            const bottom = body.querySelector('#bottom-controls');
+            const searchBtn = body.querySelector('#btn-toggle-search');
+            const searchBar = body.querySelector('#search-bar');
+            const apkModal = body.querySelector('#apk-modal');
+            const docContent = body.querySelector('#document-content');
+            const tocList = body.querySelector('#toc-list');
+            const headerFn = body.querySelector('#header-filename');
+
+            if (welcome) welcome.classList.remove('hidden');
+            if (reader) reader.classList.add('hidden');
+            if (bottom) bottom.classList.add('hidden');
+            if (searchBtn) searchBtn.classList.add('hidden');
+            if (searchBar) searchBar.classList.add('hidden');
+            if (apkModal) apkModal.classList.add('hidden');
+            if (docContent) docContent.innerHTML = '';
+            if (tocList) tocList.innerHTML = '';
+            if (headerFn) headerFn.textContent = 'Документ не открыт';
+
+            return '<!DOCTYPE html>\n' + clone.outerHTML;
+        }
+
+        function escapeXml(str) {
+            return str.replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+        }
+    </script>
+
+</body></html>
